@@ -4,8 +4,8 @@
 (include_subdirs unqualified)
 
 (executables
-  (names goblint maindomaintest) ; TODO: separate domaintest executable?
-  (public_names goblint -)
+  (names goblint maindomaintest compareCFG) ; TODO: separate domaintest executable?
+  (public_names goblint - compareCFG)
   (modes native js) ; https://dune.readthedocs.io/en/stable/dune-files.html#linking-modes
   (modules :standard \ apronDomain poly violationZ3)
   (libraries goblint-cil.all-features batteries zarith_stubs_js qcheck) ; z3
