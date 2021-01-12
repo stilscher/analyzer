@@ -21,16 +21,17 @@ let file1, file2 =
 let cfgF1, cfgB1 = MyCFG.getCFG file1
 let cfgF2, _ = MyCFG.getCFG file2
 
-let en1, en2 =
-  let get_entry_node file = 
+let fun1, fun2 =
+  let get_fun file = 
       let fds = Cil.foldGlobals file (fun acc glob -> 
           match glob with
           | GFun (fd,loc) -> fd :: acc
           | _ -> acc
         ) []
-    in FunctionEntry (List.hd fds).svar
-  in (get_entry_node file1, get_entry_node file2)  
+    in List.hd fds
+  in (get_fun file1, get_fun file2)
 
+let entryNode1, entryNode2 = (FunctionEntry fun1.svar, FunctionEntry fun2.svar)
 
 module Cfg1: CfgForward =
   struct
@@ -74,56 +75,11 @@ let print_diff_set s =
     printf "((%s, %s), %s)\n" (node_to_string fromNode1) (node_to_string fromNode2) (node_to_string toNode2) in 
   printf "diff set: "; if DiffS.is_empty s then printf "empty\n" else DiffS.iter print_elem s
 
-let print_instr i = match i with
-  | Set (lval, exp, loc) -> printf "Set (loc %d,%s,%d)" loc.line loc.file loc.byte
-  | Call _ -> printf "Call"
-  | Asm _ -> printf "Asm"
-  | VarDecl _ -> printf "VarDecl"
-
-let print_stmtkind k = match k with
-  | Instr i -> printf "Instr: "; List.iter print_instr i; printf "\n"
-  | Return _ -> printf "Return\n"
-  | Goto _ -> printf "Goto\n"
-  | Break _ -> printf "Break\n"
-  | Continue _ -> printf "Continue\n"
-  | If _ -> printf "If\n"
-  | Switch _ -> printf "Switch\n" 
-  | Loop _ -> printf "Loop\n"
-  | Block _ -> printf "Statement kind: Block\n"
-  | TryFinally _ -> printf "Statement kind: TryFinally\n"
-  | TryExcept _ -> printf "Statement kind: TryExcept\n"
-  | ComputedGoto _ -> printf "Computed Goto\n"
-
-let stmtkindEquiv x y = 
-  match x, y with
-  | Instr i1, Instr i2 -> true
-  | Return (r1, l1), Return (r2, l2) -> true
-  | Goto (g1, l1), Goto (g2, l2) -> true
-  | Break b1, Break b2 -> true
-  | Continue c1, Continue c2 -> true
-  | If _, If _ -> true
-  | Switch _, Switch _ -> true
-  | Loop _, Loop _ -> true
-  | Block b1, Block b2 -> true
-  | TryFinally _, TryFinally _ -> true
-  | TryExcept _, TryExcept _ -> true
-  | _, _ -> false
-
 let eq_node x y =
   match x,y with
-  | Statement s1, Statement s2 -> stmtkindEquiv s1.skind s2.skind
-  | Function f1, Function f2 -> f1.vname = f2.vname 
-                                && f1.vtype = f2.vtype 
-                                (* && f1.vattr = f2.vattr 
-                                && f1.vglob = f2.vglob
-                                && f1.vinline = f2.vinline
-                                && f1.vaddrof = f2.vaddrof *)
-  | FunctionEntry f1, FunctionEntry f2 -> f1.vname = f2.vname 
-                                && f1.vtype = f2.vtype 
-                                (* && f1.vattr = f2.vattr 
-                                && f1.vglob = f2.vglob
-                                && f1.vinline = f2.vinline
-                                && f1.vaddrof = f2.vaddrof *)
+  | Statement s1, Statement s2 -> CompareAST.eq_stmt (s1, fun1) (s2, fun2)
+  | Function f1, Function f2 -> CompareAST.eq_varinfo f1 f2
+  | FunctionEntry f1, FunctionEntry f2 -> CompareAST.eq_varinfo f1 f2
   | _ -> false
 
 let compare =
@@ -166,31 +122,9 @@ let compare =
       compareNext (iterOuts outList2 stdSet diffSet) in
     
     let initSets = (StdS.empty, DiffS.empty) in
-  Queue.push (en1,en2) waitingList; (compareNext initSets)
+  Queue.push (entryNode1,entryNode2) waitingList; (compareNext initSets)
 
 let () = let (stdSet', diffSet') = compare in
   print_std_set stdSet';
   print_diff_set diffSet';
   print_queue waitingList
-  
-  (*
-    let _, cfg = MyCFG.createCFG file1 in 
-    let [([(l1, e1)], nd1)] = Cfg1.next en1 in
-    let [([(l2, e2)], nd2)] = Cfg1.next nd1 in
-    let [([(l31, e31)], nd31); ([(l32, e32)], nd32); ([(l33, e33)], nd33)] = Cfg1.next nd2 in
-    let [([(l4, e4)], nd4)] = Cfg1.next nd31 in
-    let [([(l5, e5)], nd5)] = Cfg1.next nd32 in
-    let [([(l6, e6)], nd6)] = Cfg1.next nd33 in
-    let [([(l7, e7)], nd7)] = Cfg1.next nd5 in
-  printf "%s\n" (Pretty.sprint 100 (pretty_edge () e7));
-  *)
-  (*
-  printf "%s\n" entry_node1;
-  print cfgF1
-  *)
-  (*
-  Cilfacade.print_to_file "src/incremental/improvements/test_cfg_1.txt" file1;
-  Cilfacade.print_to_file "src/incremental/improvements/test_cfg_2.txt" file2
-  *)  
-  (* Queue.add (4,5) waitingList; let (a,b) = Queue.take waitingList in printf "%d, %d\n" a b *)
-  (*printf "Hello World!\n"*)
