@@ -77,9 +77,42 @@ let print_diff_set s =
     printf "((%s, %s), %s)\n" (node_to_string fromNode1) (node_to_string fromNode2) (node_to_string toNode2) in 
   printf "diff set: "; if DiffS.is_empty s then printf "empty\n" else DiffS.iter print_elem s
 
+(* in contrast to the similar method eq_stmtkind in CompareAST, 
+this method does not compare the inner body, that is sub blocks,
+of if and switch statements *)
+let rec eq_stmtkind' ((a, af): stmtkind * fundec) ((b, bf): stmtkind * fundec) =
+  let eq_block' = fun x y -> CompareAST.eq_block (x, af) (y, bf) in
+  match a, b with
+  | Instr is1, Instr is2 -> CompareAST.eq_list CompareAST.eq_instr is1 is2
+  | Return (Some exp1, _l1), Return (Some exp2, _l2) -> CompareAST.eq_exp exp1 exp2
+  | Return (None, _l1), Return (None, _l2) -> true
+  | Return _, Return _ -> false
+  | Goto (st1, _l1), Goto (st2, _l2) -> CompareAST.eq_stmt_with_location (!st1, af) (!st2, bf)
+  | Break _, Break _ -> true
+  | Continue _, Continue _ -> true
+  | If (exp1, then1, else1, _l1), If (exp2, then2, else2, _l2) -> 
+      CompareAST.eq_exp exp1 exp2 (* && eq_block' then1 then2 && eq_block' else1 else2 *)
+  | Switch (exp1, block1, stmts1, _l1), Switch (exp2, block2, stmts2, _l2) -> 
+      CompareAST.eq_exp exp1 exp2 (* && eq_block' block1 block2 && CompareAST.eq_list (fun a b -> eq_stmt (a,af) (b,bf)) stmts1 stmts2 *)
+  | Loop (block1, _l1, _con1, _br1), Loop (block2, _l2, _con2, _br2) -> eq_block' block1 block2
+  | Block block1, Block block2 -> eq_block' block1 block2
+  | TryFinally (tryBlock1, finallyBlock1, _l1), TryFinally (tryBlock2, finallyBlock2, _l2) -> 
+      eq_block' tryBlock1 tryBlock2 && eq_block' finallyBlock1 finallyBlock2
+  | TryExcept (tryBlock1, exn1, exceptBlock1, _l1), TryExcept (tryBlock2, exn2, exceptBlock2, _l2) -> 
+      eq_block' tryBlock1 tryBlock2 && eq_block' exceptBlock1 exceptBlock2
+  | _, _ -> false
+
+and eq_stmt' ((a, af): stmt * fundec) ((b, bf): stmt * fundec) =
+  List.for_all (fun (x,y) -> CompareAST.eq_label x y) (List.combine a.labels b.labels) &&
+  eq_stmtkind' (a.skind, af) (b.skind, bf)
+
 let eq_node x y =
   match x,y with
-  | Statement s1, Statement s2 -> CompareAST.eq_stmt (s1, fun1) (s2, fun2)
+  | Statement s1, Statement s2 ->
+      (* catch Invalid Argument exception which is thrown 
+      if the label lists are uncomparable due to different lengths *)
+      (try eq_stmt' (s1, fun1) (s2, fun2)
+      with Invalid_argument _ -> false)
   | Function f1, Function f2 -> CompareAST.eq_varinfo f1 f2
   | FunctionEntry f1, FunctionEntry f2 -> CompareAST.eq_varinfo f1 f2
   | _ -> false
@@ -153,3 +186,6 @@ let () = let (stdSet', diffSet') = compare in
   print_std_set stdSet';
   print_diff_set diffSet';
   print_queue waitingList
+  (* let _, cfg = MyCFG.createCFG file1 in
+  printf "cfg created\n";
+  print cfg *)
