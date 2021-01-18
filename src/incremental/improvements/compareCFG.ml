@@ -5,8 +5,8 @@ open Cil
 open Format
 
 let dirname = "/home/sarah/Studium/WS_20-21/MA/Goblint/analyzer/src/incremental/improvements"
-let filename1 = "test_prog_1.c" 
-let filename2 = "test_prog_2.c"
+let filename1 = "instr_list_prog_1.c" 
+let filename2 = "instr_list_prog_2.c"
 
 let file1, file2 =
   let create_file filename = 
@@ -121,14 +121,17 @@ let to_edge_list ls = List.map (fun (loc, edge) -> edge) ls
 
 (* TODO
 * consider whether precise comparisons are necessary for
-* Assign, Proc, Entry, Ret, VDecl
+* Assign, Proc, Entry, Ret, VDecl,
+* is varinfo comparison for fundecs enough?
 *)
 let eq_edge x y = match x, y with
   | Assign (lv1, rv1), Assign (lv2, rv2) -> CompareAST.eq_lval lv1 lv2 && CompareAST.eq_exp rv1 rv2
-  | Proc (None,f1,ars1), Proc (None,f2,ars2) -> true
-  | Proc (Some r1,f1,ars1), Proc (Some r2,f2,ars2) -> true
-  | Entry f1, Entry f2 -> true
-  | Ret (Some r1,fd1), Ret (Some r2,fd2) -> true
+  | Proc (None,f1,ars1), Proc (None,f2,ars2) -> CompareAST.eq_exp f1 f2 && CompareAST.eq_list CompareAST.eq_exp ars1 ars2
+  | Proc (Some r1,f1,ars1), Proc (Some r2,f2,ars2) -> 
+      CompareAST.eq_lval r1 r2 && CompareAST.eq_exp f1 f2 && CompareAST.eq_list CompareAST.eq_exp ars1 ars2
+  | Entry f1, Entry f2 -> CompareAST.eq_varinfo f1.svar f2.svar
+  | Ret (None,fd1), Ret (None,fd2) -> CompareAST.eq_varinfo fd1.svar fd2.svar
+  | Ret (Some r1,fd1), Ret (Some r2,fd2) -> CompareAST.eq_exp r1 r2 && CompareAST.eq_varinfo fd1.svar fd2.svar
   | Test (p1,b1), Test (p2,b2) -> CompareAST.eq_exp p1 p2 && b1 = b2
   | ASM _, ASM _ -> false
   | Skip, Skip -> true
@@ -136,6 +139,7 @@ let eq_edge x y = match x, y with
   | SelfLoop, SelfLoop -> true
   | _ -> false
 
+(* TODO sorting of edge lists necessary before comparing. Or can the always matching order be implied? *)
 let eq_edge_list xs ys = CompareAST.eq_list eq_edge xs ys
 
 let compare =
