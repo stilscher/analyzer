@@ -96,12 +96,12 @@ let rec eq_stmtkind' ((a, af): stmtkind * fundec) ((b, bf): stmtkind * fundec) =
       CompareAST.eq_exp exp1 exp2 (* && eq_block' then1 then2 && eq_block' else1 else2 *)
   | Switch (exp1, block1, stmts1, _l1), Switch (exp2, block2, stmts2, _l2) -> 
       CompareAST.eq_exp exp1 exp2 (* && eq_block' block1 block2 && CompareAST.eq_list (fun a b -> eq_stmt (a,af) (b,bf)) stmts1 stmts2 *)
-  | Loop (block1, _l1, _con1, _br1), Loop (block2, _l2, _con2, _br2) -> eq_block' block1 block2
+  | Loop (block1, _l1, _con1, _br1), Loop (block2, _l2, _con2, _br2) -> true (* eq_block' block1 block2 *)
   | Block block1, Block block2 -> eq_block' block1 block2
-  | TryFinally (tryBlock1, finallyBlock1, _l1), TryFinally (tryBlock2, finallyBlock2, _l2) -> 
-      eq_block' tryBlock1 tryBlock2 && eq_block' finallyBlock1 finallyBlock2
-  | TryExcept (tryBlock1, exn1, exceptBlock1, _l1), TryExcept (tryBlock2, exn2, exceptBlock2, _l2) -> 
-      eq_block' tryBlock1 tryBlock2 && eq_block' exceptBlock1 exceptBlock2
+  | TryFinally (tryBlock1, finallyBlock1, _l1), TryFinally (tryBlock2, finallyBlock2, _l2) -> assert false
+      (* eq_block' tryBlock1 tryBlock2 && eq_block' finallyBlock1 finallyBlock2 *)
+  | TryExcept (tryBlock1, exn1, exceptBlock1, _l1), TryExcept (tryBlock2, exn2, exceptBlock2, _l2) -> assert false
+      (* eq_block' tryBlock1 tryBlock2 && eq_block' exceptBlock1 exceptBlock2 *)
   | _, _ -> false
 
 and eq_stmt' ((a, af): stmt * fundec) ((b, bf): stmt * fundec) =
