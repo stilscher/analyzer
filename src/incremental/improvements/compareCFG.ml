@@ -4,14 +4,20 @@ open Defaults
 open Cil
 open Format
 
+(*
 let dirname = "/home/sarah/Studium/WS_20-21/MA/Goblint/analyzer/src/incremental/improvements"
 let filename1 = "instr_list_prog_1.c" 
 let filename2 = "instr_list_prog_2.c"
+*)
+
+let dirname = "/home/sarah/Studium/WS_20-21/MA/Goblint/analyzer/tests/regression/01-cpa"
+let filename1 = "04-functions.c" 
+let filename2 = "04-functions'.c"
 
 let file1, file2 =
   let create_file filename = 
     Cilfacade.init ();
-      let nname =  Filename.concat dirname (Filename.basename filename) in
+      let nname = Filename.concat dirname (Filename.basename filename) in
       let fileAST = Cilfacade.getAST nname in
       let ast = Cilfacade.callConstructors fileAST in
     Cilfacade.createCFG ast;
@@ -21,17 +27,15 @@ let file1, file2 =
 let cfgF1, cfgB1 = MyCFG.getCFG file1
 let cfgF2, _ = MyCFG.getCFG file2
 
-let fun1, fun2 =
-  let get_fun file = 
+let funs1, funs2 =
+  let get_funs file = 
       let fds = Cil.foldGlobals file (fun acc glob -> 
           match glob with
           | GFun (fd,loc) -> fd :: acc
           | _ -> acc
         ) []
-    in List.hd fds
-  in (get_fun file1, get_fun file2)
-
-let entryNode1, entryNode2 = (FunctionEntry fun1.svar, FunctionEntry fun2.svar)
+    in fds
+  in (get_funs file1, get_funs file2)
 
 module Cfg1: CfgForward =
   struct
@@ -67,9 +71,7 @@ let node_to_string n = Pretty.sprint 200 (pretty_node () n)
 
 let print_std_set s = 
   let print_elem ((fromNode1, fromNode2), (edgeList1, edgeList2), (toNode1, toNode2)) = 
-    printf "(%s, %s)\n" (node_to_string fromNode2) (node_to_string toNode2)
-    (* printf "((%s, %s), (%s, %s))\n" (node_to_string fromNode1) (node_to_string fromNode2) 
-      (node_to_string toNode1) (node_to_string toNode2) *) in 
+    printf "(%s, %s)\n" (node_to_string fromNode2) (node_to_string toNode2) in 
   printf "std set: "; if StdS.is_empty s then printf "empty\n" else StdS.iter print_elem s
 
 let print_diff_set s =
@@ -103,26 +105,26 @@ let rec eq_stmtkind' ((a, af): stmtkind * fundec) ((b, bf): stmtkind * fundec) =
   | _, _ -> false
 
 and eq_stmt' ((a, af): stmt * fundec) ((b, bf): stmt * fundec) =
-  List.for_all (fun (x,y) -> CompareAST.eq_label x y) (List.combine a.labels b.labels) &&
-  eq_stmtkind' (a.skind, af) (b.skind, bf)
+  (* catch Invalid Argument exception which is thrown by List.combine
+  if the label lists are of different length *)
+  try List.for_all (fun (x,y) -> CompareAST.eq_label x y) (List.combine a.labels b.labels) 
+    && eq_stmtkind' (a.skind, af) (b.skind, bf)
+  with Invalid_argument _ -> false
 
-let eq_node x y =
+let eq_node (x, fun1) (y, fun2) =
   match x,y with
-  | Statement s1, Statement s2 ->
-      (* catch Invalid Argument exception which is thrown 
-      if the label lists are uncomparable due to different lengths *)
-      (try eq_stmt' (s1, fun1) (s2, fun2)
-      with Invalid_argument _ -> false)
+  | Statement s1, Statement s2 -> eq_stmt' (s1, fun1) (s2, fun2)
   | Function f1, Function f2 -> CompareAST.eq_varinfo f1 f2
   | FunctionEntry f1, FunctionEntry f2 -> CompareAST.eq_varinfo f1 f2
   | _ -> false
 
-let to_edge_list ls = List.map (fun (loc, edge) -> edge) ls
-
-(* TODO
+(*
 * consider whether precise comparisons are necessary for
-* Assign, Proc, Entry, Ret, VDecl,
+* Assign, Proc, Entry, Ret, VDecl
+* -> yes, because with exp.mincfg many nodes are "merged" and then exclusively represented in edges
 * is varinfo comparison for fundecs enough?
+* -> varinfo is a unique representation for each global or local variable, but in eq_varinfo only it is only considered partly
+* -> all relevant components are being compare, TODO: remove vinline, vaddrof
 *)
 let eq_edge x y = match x, y with
   | Assign (lv1, rv1), Assign (lv2, rv2) -> CompareAST.eq_lval lv1 lv2 && CompareAST.eq_exp rv1 rv2
@@ -139,10 +141,13 @@ let eq_edge x y = match x, y with
   | SelfLoop, SelfLoop -> true
   | _ -> false
 
-(* TODO sorting of edge lists necessary before comparing. Or can the always matching order be implied? *)
+(* The order of the edges in the list is relevant. Therefor compare 
+them one to one without sorting first*)
 let eq_edge_list xs ys = CompareAST.eq_list eq_edge xs ys
 
-let compare =
+let to_edge_list ls = List.map (fun (loc, edge) -> edge) ls
+
+let compare fun1 fun2 =
     let rec compareNext (stdSet, diffSet) =
       (*printf "\ncompare next in waiting list\n";
       print_queue waitingList;
@@ -152,6 +157,7 @@ let compare =
       if Queue.is_empty waitingList then (stdSet, diffSet) 
       else
         let (fromNode1, fromNode2) = Queue.take waitingList in
+        (* printf "fromNode2: %s\n" (node_to_string fromNode2); *)
         let outList1 = Cfg1.next fromNode1 in
         let outList2 = Cfg2.next fromNode2 in
                
@@ -162,7 +168,7 @@ let compare =
             | [] -> let diffSet' = DiffS.add ((fromNode1, fromNode2), edgeList2, toNode2) diffSet in (stdSet, diffSet')
             | (locEdgeList1, toNode1) :: ls1' ->
               let edgeList1 = to_edge_list locEdgeList1 in
-              if eq_node toNode1 toNode2 && eq_edge_list edgeList1 edgeList2 then
+              if eq_node (toNode1, fun1) (toNode2, fun2) && eq_edge_list edgeList1 edgeList2 then
                 ((let notIn = StdS.for_all 
                     (fun (fromNodes', edges, (toNode1', toNode2')) -> not (Node.equal toNode1 toNode1') || not (Node.equal toNode2 toNode2')) stdSet in
                     (* printf "%b\n" notIn; *)
@@ -177,6 +183,8 @@ let compare =
           match ls2 with
           | [] -> (stdSet, diffSet)
           | (locEdgeList2, toNode2) :: ls2' ->
+              (* printf "toNode2: %s\n" (node_to_string toNode2);
+              printf "edges: %s\n" (Pretty.sprint 200 (pretty_edges () locEdgeList2)); *)
               let edgeList2 = to_edge_list locEdgeList2 in
               let (stdSet', (diffSet' : DiffS.t)) = findEquiv (edgeList2, toNode2) outList1 stdSet diffSet in
             iterOuts ls2' stdSet' diffSet' in
@@ -184,12 +192,27 @@ let compare =
       compareNext (iterOuts outList2 stdSet diffSet) in
     
     let initSets = (StdS.empty, DiffS.empty) in
+    let entryNode1, entryNode2 = (FunctionEntry fun1.svar, FunctionEntry fun2.svar) in
   Queue.push (entryNode1,entryNode2) waitingList; (compareNext initSets)
 
-let () = let (stdSet', diffSet') = compare in
-  print_std_set stdSet';
-  print_diff_set diffSet';
-  print_queue waitingList
-  (* let _, cfg = MyCFG.createCFG file1 in
+let compare_all_funs =
+  let sort = List.sort (fun f g -> String.compare f.svar.vname g.svar.vname) in
+  let rec aux funs1_sorted funs2_sorted acc =
+    match funs1_sorted, funs2_sorted with
+    | [], [] -> acc
+    | f1::funs1', f2::funs2' -> 
+        printf "\ncompare %s and %s\n" (f1.svar.vname) (f2.svar.vname); 
+        aux funs1' funs2' (compare f1 f2 :: acc)
+    | _, _ -> raise (Invalid_argument "Function to be compared not in both files") in
+  printf "# of functions to compare: %d %d\n" (List.length funs1) (List.length funs2); 
+  aux (sort funs1) (sort funs2) []
+
+let () =
+  let rec print_res ls = match ls with
+    | [] -> ()
+    | (stdSet', diffSet')::ls' -> print_std_set stdSet'; print_diff_set diffSet'; print_queue waitingList; print_res ls'
+  in print_res compare_all_funs
+  (*
+  let _, cfg = MyCFG.createCFG file1 in
   printf "cfg created\n";
   print cfg *)
