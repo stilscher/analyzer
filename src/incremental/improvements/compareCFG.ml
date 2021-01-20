@@ -4,49 +4,6 @@ open Defaults
 open Cil
 open Format
 
-(*
-let dirname = "/home/sarah/Studium/WS_20-21/MA/Goblint/analyzer/src/incremental/improvements"
-let filename1 = "instr_list_prog_1.c" 
-let filename2 = "instr_list_prog_2.c"
-*)
-
-let dirname = "/home/sarah/Studium/WS_20-21/MA/Goblint/analyzer/tests/regression/01-cpa"
-let filename1 = "04-functions.c" 
-let filename2 = "04-functions'.c"
-
-let file1, file2 =
-  let create_file filename = 
-    Cilfacade.init ();
-      let nname = Filename.concat dirname (Filename.basename filename) in
-      let fileAST = Cilfacade.getAST nname in
-      let ast = Cilfacade.callConstructors fileAST in
-    Cilfacade.createCFG ast;
-    ast
-  in (create_file filename1, create_file filename2)
-
-let cfgF1, cfgB1 = MyCFG.getCFG file1
-let cfgF2, _ = MyCFG.getCFG file2
-
-let funs1, funs2 =
-  let get_funs file = 
-      let fds = Cil.foldGlobals file (fun acc glob -> 
-          match glob with
-          | GFun (fd,loc) -> fd :: acc
-          | _ -> acc
-        ) []
-    in fds
-  in (get_funs file1, get_funs file2)
-
-module Cfg1: CfgForward =
-  struct
-    let next = cfgF1
-  end
-
-module Cfg2: CfgForward =
-  struct
-    let next = cfgF2
-  end
-
 module StdS = Set.Make (
   struct
     let compare = compare
@@ -82,7 +39,7 @@ let print_diff_set s =
 (* in contrast to the similar method eq_stmtkind in CompareAST, 
 this method does not compare the inner body, that is sub blocks,
 of if and switch statements *)
-let rec eq_stmtkind' ((a, af): stmtkind * fundec) ((b, bf): stmtkind * fundec) =
+let eq_stmtkind' ((a, af): stmtkind * fundec) ((b, bf): stmtkind * fundec) =
   let eq_block' = fun x y -> CompareAST.eq_block (x, af) (y, bf) in
   match a, b with
   | Instr is1, Instr is2 -> CompareAST.eq_list CompareAST.eq_instr is1 is2
@@ -104,7 +61,7 @@ let rec eq_stmtkind' ((a, af): stmtkind * fundec) ((b, bf): stmtkind * fundec) =
       (* eq_block' tryBlock1 tryBlock2 && eq_block' exceptBlock1 exceptBlock2 *)
   | _, _ -> false
 
-and eq_stmt' ((a, af): stmt * fundec) ((b, bf): stmt * fundec) =
+let eq_stmt' ((a, af): stmt * fundec) ((b, bf): stmt * fundec) =
   (* catch Invalid Argument exception which is thrown by List.combine
   if the label lists are of different length *)
   try List.for_all (fun (x,y) -> CompareAST.eq_label x y) (List.combine a.labels b.labels) 
@@ -147,7 +104,22 @@ let eq_edge_list xs ys = CompareAST.eq_list eq_edge xs ys
 
 let to_edge_list ls = List.map (fun (loc, edge) -> edge) ls
 
-let compare fun1 fun2 =
+let compare_all_funs file1 file2 =
+  let cfgF1, _ = MyCFG.getCFG file1
+  and cfgF2, _ = MyCFG.getCFG file2 in
+
+  let module Cfg1: CfgForward = struct let next = cfgF1 end in
+  let module Cfg2: CfgForward = struct let next = cfgF2 end in
+
+  let funs1, funs2 =
+    let get_funs file = Cil.foldGlobals file (fun acc glob -> 
+            match glob with
+            | GFun (fd,loc) -> fd :: acc
+            | _ -> acc
+          ) []
+    in (get_funs file1, get_funs file2)
+
+  and compare fun1 fun2 =
     let rec compareNext (stdSet, diffSet) =
       (*printf "\ncompare next in waiting list\n";
       print_queue waitingList;
@@ -193,26 +165,19 @@ let compare fun1 fun2 =
     
     let initSets = (StdS.empty, DiffS.empty) in
     let entryNode1, entryNode2 = (FunctionEntry fun1.svar, FunctionEntry fun2.svar) in
-  Queue.push (entryNode1,entryNode2) waitingList; (compareNext initSets)
+  Queue.push (entryNode1,entryNode2) waitingList; (compareNext initSets) in
 
-let compare_all_funs =
-  let sort = List.sort (fun f g -> String.compare f.svar.vname g.svar.vname) in
-  let rec aux funs1_sorted funs2_sorted acc =
-    match funs1_sorted, funs2_sorted with
-    | [], [] -> acc
-    | f1::funs1', f2::funs2' -> 
-        printf "\ncompare %s and %s\n" (f1.svar.vname) (f2.svar.vname); 
-        aux funs1' funs2' (compare f1 f2 :: acc)
-    | _, _ -> raise (Invalid_argument "Function to be compared not in both files") in
-  printf "# of functions to compare: %d %d\n" (List.length funs1) (List.length funs2); 
-  aux (sort funs1) (sort funs2) []
-
-let () =
-  let rec print_res ls = match ls with
-    | [] -> ()
-    | (stdSet', diffSet')::ls' -> print_std_set stdSet'; print_diff_set diffSet'; print_queue waitingList; print_res ls'
-  in print_res compare_all_funs
-  (*
-  let _, cfg = MyCFG.createCFG file1 in
-  printf "cfg created\n";
-  print cfg *)
+  let iterFuns =
+    let sort = List.sort (fun f g -> String.compare f.svar.vname g.svar.vname) in
+    let rec aux funs1 funs2 acc =
+      match funs1, funs2 with
+      | [], [] -> acc
+      | f1::funs1', f2::funs2' -> 
+          printf "\ncompare %s and %s\n" (f1.svar.vname) (f2.svar.vname); 
+          aux funs1' funs2' (compare f1 f2 :: acc)
+      | _, _ -> raise (Invalid_argument "Function to be compared not in both files") in
+    aux (sort funs1) (sort funs2) [] in
+  
+  assert (List.length funs1 = List.length funs2);
+  printf "# of functions to compare: %d\n" (List.length funs2);
+  iterFuns
