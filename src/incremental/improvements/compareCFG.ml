@@ -36,13 +36,24 @@ let print_diff_set s =
     printf "((%s, %s), %s)\n" (node_to_string fromNode1) (node_to_string fromNode2) (node_to_string toNode2) in 
   printf "diff set: "; if DiffS.is_empty s then printf "empty\n" else DiffS.iter print_elem s
 
+let eq_instr' (a: instr) (b: instr) = match a, b with
+  | Set (lv1, exp1, _l1), Set (lv2, exp2, _l2) -> CompareAST.eq_lval lv1 lv2 && CompareAST.eq_exp exp1 exp2
+  | Call (Some lv1, f1, args1, _l1), Call (Some lv2, f2, args2, _l2) -> CompareAST.eq_lval lv1 lv2 && CompareAST.eq_exp f1 f2 && CompareAST.eq_list CompareAST.eq_exp args1 args2
+  | Call (None, f1, args1, _l1), Call (None, f2, args2, _l2) -> CompareAST.eq_exp f1 f2 && CompareAST.eq_list CompareAST.eq_exp args1 args2
+  | Asm (attr1, tmp1, ci1, dj1, rk1, l1), Asm (attr2, tmp2, ci2, dj2, rk2, l2) -> 
+      CompareAST.eq_list String.equal tmp1 tmp2 && CompareAST.eq_list(fun (x1,y1,z1) (x2,y2,z2)-> x1 = x2 && y1 = y2 
+      && CompareAST.eq_lval z1 z2) ci1 ci2 && CompareAST.eq_list(fun (x1,y1,z1) (x2,y2,z2)-> x1 = x2 && y1 = y2 
+      && CompareAST.eq_exp z1 z2) dj1 dj2 && CompareAST.eq_list String.equal rk1 rk2(* ignore attributes and locations *)
+  | VarDecl (v1, _l1), VarDecl (v2, _l2) -> CompareAST.eq_varinfo v1 v2
+  | _, _ -> false
+
 (* in contrast to the similar method eq_stmtkind in CompareAST, 
 this method does not compare the inner body, that is sub blocks,
 of if and switch statements *)
 let eq_stmtkind' ((a, af): stmtkind * fundec) ((b, bf): stmtkind * fundec) =
   let eq_block' = fun x y -> CompareAST.eq_block (x, af) (y, bf) in
   match a, b with
-  | Instr is1, Instr is2 -> CompareAST.eq_list CompareAST.eq_instr is1 is2
+  | Instr is1, Instr is2 -> CompareAST.eq_list eq_instr' is1 is2
   | Return (Some exp1, _l1), Return (Some exp2, _l2) -> CompareAST.eq_exp exp1 exp2
   | Return (None, _l1), Return (None, _l2) -> true
   | Return _, Return _ -> false
@@ -173,11 +184,11 @@ let compare_all_funs file1 file2 =
       match funs1, funs2 with
       | [], [] -> acc
       | f1::funs1', f2::funs2' -> 
-          printf "\ncompare %s and %s\n" (f1.svar.vname) (f2.svar.vname); 
+          (* printf "\ncompare %s and %s\n" (f1.svar.vname) (f2.svar.vname); *)
           aux funs1' funs2' (compare f1 f2 :: acc)
       | _, _ -> raise (Invalid_argument "Function to be compared not in both files") in
     aux (sort funs1) (sort funs2) [] in
   
   assert (List.length funs1 = List.length funs2);
-  printf "# of functions to compare: %d\n" (List.length funs2);
+  (* printf "# of functions to compare: %d\n" (List.length funs2); *)
   iterFuns

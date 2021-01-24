@@ -6,6 +6,7 @@ open Defaults
 open Printf
 open Json
 open Goblintutil
+open CompareCFG
 
 let writeconffile = ref ""
 
@@ -424,6 +425,43 @@ let do_stats () =
     Stats.print (Messages.get_out "timing" Legacy.stderr) "Timings:\n";
     flush_all ()
 
+let testDuplicateFile fpath =
+  if Str.string_match (Str.regexp ".+\\.c$") fpath 0 then
+
+  let manualExclude = [] in
+  let exclude = let chan = open_in fpath in
+    try (let firstLine = input_line chan in
+      let b = Str.string_match (Str.regexp "\\(//\\( \\)?SKIP\\)\\|\\(//\\( \\)?PARAM\\)") firstLine 0 in close_in chan; b)
+    with End_of_file -> (close_in chan; false) in
+
+  if not exclude && not (List.mem (Filename.basename fpath) manualExclude) then
+    let getfile fname = Cilfacade.init();
+      cFileNames := [fname];
+      create_temp_dir ();
+      preprocess_files () |> merge_preprocessed in
+    let file1 = getfile fpath
+    and file2 = getfile fpath in 
+    let ls = CompareCFG.compare_all_funs file1 file2 in
+    (* let rec print_res ls = match ls with
+      | [] -> ()
+      | (stdSet', diffSet')::ls' -> print_std_set stdSet'; print_diff_set diffSet'; print_res ls'
+    in print_res ls; *)
+    let handleDiff (std, diff) = if DiffS.cardinal diff > 0 then (printf "\n%s\n" fpath; print_diff_set diff) in
+    List.iter handleDiff ls
+    (* assert (List.for_all (fun (std, diff) -> DiffS.cardinal diff = 0) ls)*)
+
+  (* tests die nicht korrekt durchlaufen: tests/regression/28-race_reach/60-invariant_racefree.c*)
+
+let testFiles = 
+  let baseDir = "tests/regression" in
+  (* these test directories only contain tests with additional parameters *)
+  let excludeDirs = [] in
+  let testDirs = let relDirs = Array.filter (fun n -> not (List.mem n excludeDirs)) (Sys.readdir baseDir) in
+    Array.map (fun name -> Filename.concat baseDir name) relDirs in
+  let toFullFileNameList dir = Array.map (fun name -> Filename.concat dir name) (Sys.readdir dir) |> Array.to_list in
+  Array.fold_right (fun dir acc -> (toFullFileNameList dir) @ acc) testDirs []
+
+
 (** the main function *)
 let main =
   let main_running = ref false in fun () ->
@@ -431,6 +469,15 @@ let main =
       main_running := true;
       try
         Stats.reset Stats.SoftwareTimer;
+        
+        List.iter testDuplicateFile testFiles;
+        
+        (*
+        testDuplicateFile "src/incremental/improvements/mutex_test.c"; 
+        testDuplicateFile "tests/regression/28-race_reach/60-invariant_racefree.c";
+        testDuplicateFile "tests/regression/00-sanity/08-asm_nop.c" *)
+
+        (*
         parse_arguments ();
         check_arguments ();
 
@@ -454,6 +501,7 @@ let main =
         do_html_output ();
         if !verified = Some false then exit 3;  (* verifier failed! *)
         if !Messages.worldStopped then exit 124 (* timeout! *)
+        *)
       with Exit -> exit 1
     )
 
