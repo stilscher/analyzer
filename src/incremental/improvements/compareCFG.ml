@@ -36,6 +36,11 @@ let print_diff_set s =
     printf "((%s, %s), %s)\n" (node_to_string fromNode1) (node_to_string fromNode2) (node_to_string toNode2) in 
   printf "diff set: "; if DiffS.is_empty s then printf "empty\n" else DiffS.iter print_elem s
 
+(* in contrast to the original eq_varinfo in CompareAST, this method also ignores vinline and vaddrof *)
+let eq_varinfo' (a: varinfo) (b: varinfo) = a.vname = b.vname && CompareAST.eq_typ a.vtype b.vtype && CompareAST.eq_list CompareAST.eq_attribute a.vattr b.vattr &&
+                                           a.vstorage = b.vstorage && a.vglob = b.vglob
+(* Ignore the location, vid, vreferenced, vdescr, vdescrpure, vinline, vaddrof*)
+
 let eq_instr' (a: instr) (b: instr) = match a, b with
   | Set (lv1, exp1, _l1), Set (lv2, exp2, _l2) -> CompareAST.eq_lval lv1 lv2 && CompareAST.eq_exp exp1 exp2
   | Call (Some lv1, f1, args1, _l1), Call (Some lv2, f2, args2, _l2) -> CompareAST.eq_lval lv1 lv2 && CompareAST.eq_exp f1 f2 && CompareAST.eq_list CompareAST.eq_exp args1 args2
@@ -44,7 +49,7 @@ let eq_instr' (a: instr) (b: instr) = match a, b with
       CompareAST.eq_list String.equal tmp1 tmp2 && CompareAST.eq_list(fun (x1,y1,z1) (x2,y2,z2)-> x1 = x2 && y1 = y2 
       && CompareAST.eq_lval z1 z2) ci1 ci2 && CompareAST.eq_list(fun (x1,y1,z1) (x2,y2,z2)-> x1 = x2 && y1 = y2 
       && CompareAST.eq_exp z1 z2) dj1 dj2 && CompareAST.eq_list String.equal rk1 rk2(* ignore attributes and locations *)
-  | VarDecl (v1, _l1), VarDecl (v2, _l2) -> CompareAST.eq_varinfo v1 v2
+  | VarDecl (v1, _l1), VarDecl (v2, _l2) -> eq_varinfo' v1 v2
   | _, _ -> false
 
 (* in contrast to the similar method eq_stmtkind in CompareAST, 
@@ -82,8 +87,8 @@ let eq_stmt' ((a, af): stmt * fundec) ((b, bf): stmt * fundec) =
 let eq_node (x, fun1) (y, fun2) =
   match x,y with
   | Statement s1, Statement s2 -> eq_stmt' (s1, fun1) (s2, fun2)
-  | Function f1, Function f2 -> CompareAST.eq_varinfo f1 f2
-  | FunctionEntry f1, FunctionEntry f2 -> CompareAST.eq_varinfo f1 f2
+  | Function f1, Function f2 -> eq_varinfo' f1 f2
+  | FunctionEntry f1, FunctionEntry f2 -> eq_varinfo' f1 f2
   | _ -> false
 
 (*
@@ -91,21 +96,21 @@ let eq_node (x, fun1) (y, fun2) =
 * Assign, Proc, Entry, Ret, VDecl
 * -> yes, because with exp.mincfg many nodes are "merged" and then exclusively represented in edges
 * is varinfo comparison for fundecs enough?
-* -> varinfo is a unique representation for each global or local variable, but in eq_varinfo only it is only considered partly
-* -> all relevant components are being compare, TODO: remove vinline, vaddrof
+* -> varinfo is a unique representation for each global or local variable, but in eq_varinfo' it is only considered partly
+* -> all relevant components are being compare
 *)
 let eq_edge x y = match x, y with
   | Assign (lv1, rv1), Assign (lv2, rv2) -> CompareAST.eq_lval lv1 lv2 && CompareAST.eq_exp rv1 rv2
   | Proc (None,f1,ars1), Proc (None,f2,ars2) -> CompareAST.eq_exp f1 f2 && CompareAST.eq_list CompareAST.eq_exp ars1 ars2
   | Proc (Some r1,f1,ars1), Proc (Some r2,f2,ars2) -> 
       CompareAST.eq_lval r1 r2 && CompareAST.eq_exp f1 f2 && CompareAST.eq_list CompareAST.eq_exp ars1 ars2
-  | Entry f1, Entry f2 -> CompareAST.eq_varinfo f1.svar f2.svar
-  | Ret (None,fd1), Ret (None,fd2) -> CompareAST.eq_varinfo fd1.svar fd2.svar
-  | Ret (Some r1,fd1), Ret (Some r2,fd2) -> CompareAST.eq_exp r1 r2 && CompareAST.eq_varinfo fd1.svar fd2.svar
+  | Entry f1, Entry f2 -> eq_varinfo' f1.svar f2.svar
+  | Ret (None,fd1), Ret (None,fd2) -> eq_varinfo' fd1.svar fd2.svar
+  | Ret (Some r1,fd1), Ret (Some r2,fd2) -> CompareAST.eq_exp r1 r2 && eq_varinfo' fd1.svar fd2.svar
   | Test (p1,b1), Test (p2,b2) -> CompareAST.eq_exp p1 p2 && b1 = b2
   | ASM _, ASM _ -> false
   | Skip, Skip -> true
-  | VDecl v1, VDecl v2 -> CompareAST.eq_varinfo v1 v2
+  | VDecl v1, VDecl v2 -> eq_varinfo' v1 v2
   | SelfLoop, SelfLoop -> true
   | _ -> false
 
