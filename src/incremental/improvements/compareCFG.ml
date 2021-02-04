@@ -120,22 +120,7 @@ let eq_edge_list xs ys = CompareAST.eq_list eq_edge xs ys
 
 let to_edge_list ls = List.map (fun (loc, edge) -> edge) ls
 
-let compare_all_funs file1 file2 =
-  let cfgF1, _ = MyCFG.getCFG file1
-  and cfgF2, _ = MyCFG.getCFG file2 in
-
-  let module Cfg1: CfgForward = struct let next = cfgF1 end in
-  let module Cfg2: CfgForward = struct let next = cfgF2 end in
-
-  let funs1, funs2 =
-    let get_funs file = Cil.foldGlobals file (fun acc glob -> 
-            match glob with
-            | GFun (fd,loc) -> fd :: acc
-            | _ -> acc
-          ) []
-    in (get_funs file1, get_funs file2)
-
-  and compare fun1 fun2 =
+let compare (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 =
     let rec compareNext (stdSet, diffSet) =
       (*printf "\ncompare next in waiting list\n";
       print_queue waitingList;
@@ -181,7 +166,25 @@ let compare_all_funs file1 file2 =
     
     let initSets = (StdS.empty, DiffS.empty) in
     let entryNode1, entryNode2 = (FunctionEntry fun1.svar, FunctionEntry fun2.svar) in
-  Queue.push (entryNode1,entryNode2) waitingList; (compareNext initSets) in
+  Queue.push (entryNode1,entryNode2) waitingList; (compareNext initSets)
+
+
+let compare_all_funs file1 file2 =
+  let cfgF1, _ = MyCFG.getCFG file1
+  and cfgF2, _ = MyCFG.getCFG file2 in
+
+  let module Cfg1: CfgForward = struct let next = cfgF1 end in
+  let module Cfg2: CfgForward = struct let next = cfgF2 end in
+
+  let funs1, funs2 =
+    let get_funs file = Cil.foldGlobals file (fun acc glob ->
+            match glob with
+            | GFun (fd,loc) -> fd :: acc
+            | _ -> acc
+          ) []
+    in (get_funs file1, get_funs file2)
+    (*printf "functions to be compared: %s %s\n" (List.hd x).svar.vname (List.hd y).svar.vname; *)
+  in
 
   let iterFuns =
     let sort = List.sort (fun f g -> String.compare f.svar.vname g.svar.vname) in
@@ -190,7 +193,7 @@ let compare_all_funs file1 file2 =
       | [], [] -> acc
       | f1::funs1', f2::funs2' -> 
           (* printf "\ncompare %s and %s\n" (f1.svar.vname) (f2.svar.vname); *)
-          aux funs1' funs2' (compare f1 f2 :: acc)
+          aux funs1' funs2' (compare (module Cfg1) (module Cfg2) f1 f2 :: acc)
       | _, _ -> raise (Invalid_argument "Function to be compared not in both files") in
     aux (sort funs1) (sort funs2) [] in
   

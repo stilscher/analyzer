@@ -435,22 +435,16 @@ let testDuplicateFile fpath =
     with End_of_file -> (close_in chan; false) in
 
   if not exclude && not (List.mem (Filename.basename fpath) manualExclude) then
-    let getfile fname = Cilfacade.init();
+    let getFile fname = Cilfacade.init();
       cFileNames := [fname];
       create_temp_dir ();
       preprocess_files () |> merge_preprocessed in
-    let file1 = getfile fpath
-    and file2 = getfile fpath in 
+    let file1 = getFile fpath
+    and file2 = getFile fpath in 
     let ls = CompareCFG.compare_all_funs file1 file2 in
-    (* let rec print_res ls = match ls with
-      | [] -> ()
-      | (stdSet', diffSet')::ls' -> print_std_set stdSet'; print_diff_set diffSet'; print_res ls'
-    in print_res ls; *)
     let handleDiff (std, diff) = if DiffS.cardinal diff > 0 then (printf "\n%s\n" fpath; print_diff_set diff) in
     List.iter handleDiff ls
     (* assert (List.for_all (fun (std, diff) -> DiffS.cardinal diff = 0) ls)*)
-
-  (* tests die nicht korrekt durchlaufen: tests/regression/28-race_reach/60-invariant_racefree.c*)
 
 let testFiles = 
   let baseDir = "tests/regression" in
@@ -461,6 +455,12 @@ let testFiles =
   let toFullFileNameList dir = Array.map (fun name -> Filename.concat dir name) (Sys.readdir dir) |> Array.to_list in
   Array.fold_right (fun dir acc -> (toFullFileNameList dir) @ acc) testDirs []
 
+let store_load_cfg (cfg : ((Cil.location * MyCFG.edge) list * Node.node) MyCFG.H.t) =
+  SerializeCFG.save_cfg cfg;
+  let (r : ((Cil.location * MyCFG.edge) list * Node.node) MyCFG.H.t option) = SerializeCFG.load_cfg "cfg.data" in 
+  match r with
+  | None -> printf "no cfg loaded\n"
+  | Some c -> MyCFG.print c
 
 (** the main function *)
 let main =
@@ -469,11 +469,35 @@ let main =
       main_running := true;
       try
         Stats.reset Stats.SoftwareTimer;
+
+        let time_it action arg =
+          let start_time = Sys.time () in
+          ignore (action arg);
+          let finish_time = Sys.time () in
+          finish_time -. start_time in
+
+        let time f x =
+          let t = Sys.time() in
+          let fx = f x in
+          Printf.printf "Execution time: %fs\n" (Sys.time() -. t);
+          fx in
         
-        List.iter testDuplicateFile testFiles;
+        (* List.iter testDuplicateFile testFiles; *)
+        let getFile fnames = Cilfacade.init();
+          cFileNames := fnames;
+          create_temp_dir ();
+          preprocess_files () |> merge_preprocessed in
+
+        let file = getFile ["tests/regression/01-cpa/01-expressions.c"] in
         
+        printf "avg time createCFG\n";
+        let avg_time n = 
+          let rec sum i acc = if i <= 0.0 then acc else sum (i -. 1.) ((time_it (fun x -> let _, _ = MyCFG.createCFG x in ()) file) +. acc) in
+          (sum n 0.) /. n in
+        printf "%f\n" (avg_time 100000.)
+        (* time (fun x -> let _, _ = MyCFG.createCFG x in ()) file; *)
+
         (*
-        testDuplicateFile "src/incremental/improvements/mutex_test.c"; 
         testDuplicateFile "tests/regression/28-race_reach/60-invariant_racefree.c";
         testDuplicateFile "tests/regression/00-sanity/08-asm_nop.c" *)
 
