@@ -185,28 +185,27 @@ let compare (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 =
       if Queue.is_empty waitingList then (stdSet, diffSet) 
       else
         let (fromNode1, fromNode2) = Queue.take waitingList in
-        printf "\n";
-        (* printf "\nfromNode2: %s\n" (node_to_string fromNode2); *)
+        (* printf "\n";
+        printf "\nfromNode2: %s\n" (node_to_string fromNode2); *)
         let outList1 = Cfg1.next fromNode1 in
         let outList2 = Cfg2.next fromNode2 in
                
         let findEquiv (edgeList2, toNode2) ls1 stdSet diffSet = 
-          (* printf "look for equiv edge in graph 1 by iterating over them, %d more to go\n" (List.length ls1); *)
           let rec aux ls1 stdSet diffSet =
             match ls1 with
             | [] -> let diffSet' = DiffS.add ((fromNode1, fromNode2), edgeList2, toNode2) diffSet in (stdSet, diffSet')
             | (locEdgeList1, toNode1) :: ls1' ->
-              printf "%s -> %s, %s -> %s\n" (node_to_id_string fromNode1) (node_to_id_string toNode1) (node_to_id_string fromNode2) (node_to_id_string toNode2);
+              (* printf "%s -> %s, %s -> %s\n" (node_to_id_string fromNode1) (node_to_id_string toNode1) (node_to_id_string fromNode2) (node_to_id_string toNode2); *)
               let edgeList1 = to_edge_list locEdgeList1 in
               if eq_node (toNode1, fun1) (toNode2, fun2) && eq_edge_list edgeList1 edgeList2 then
-                (printf "match\n";
+                (* printf "match\n"; *)
                 ((let notIn = StdS.for_all 
                     (fun (fromNodes', edges, (toNode1', toNode2')) -> not (Node.equal toNode1 toNode1' && Node.equal toNode2 toNode2')) stdSet in
-                  if notIn then printf "add to waitingList, "; Queue.add (toNode1, toNode2) waitingList);
+                  if notIn then (* printf "add to waitingList, "; *) Queue.add (toNode1, toNode2) waitingList);
                   let stdSet' = StdS.add ((fromNode1, fromNode2), (edgeList1, edgeList2), (toNode1, toNode2)) stdSet
-                in printf "add to stdSet\n"; (stdSet', diffSet)))
-              else (printf "no match\n"; 
-              aux ls1' stdSet diffSet) in
+                in (* printf "add to stdSet\n"; *) (stdSet', diffSet))
+              else (* (printf "no match\n"; *)
+              aux ls1' stdSet diffSet in
           aux ls1 stdSet diffSet in
         
         let rec iterOuts ls2 stdSet diffSet = 
@@ -214,7 +213,11 @@ let compare (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 =
           | [] -> (stdSet, diffSet)
           | (locEdgeList2, toNode2) :: ls2' ->
               let edgeList2 = to_edge_list locEdgeList2 in
-              let (stdSet', (diffSet' : DiffS.t)) = findEquiv (edgeList2, toNode2) outList1 stdSet diffSet in
+              (* TODO: can exp be evaluated to also recognize Test (0,true) for example, is this neccessary? *)
+              let isActualEdge = match List.hd edgeList2 with
+                | Test (p,b) -> not (p = Cil.one && b = false)
+                | _ -> true in
+              let (stdSet', diffSet') = if isActualEdge then findEquiv (edgeList2, toNode2) outList1 stdSet diffSet else (stdSet, diffSet) in
             iterOuts ls2' stdSet' diffSet' in
       compareNext (iterOuts outList2 stdSet diffSet) in
     

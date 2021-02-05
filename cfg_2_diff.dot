@@ -1,0 +1,54 @@
+digraph cfg {
+442 -> 44 [ label = "Entry main", color = "green" ];
+442[label="442: FunctionEntry main"];
+44 -> 52 [ label = "Assign 'x___0 = 0' ", color = "green" ];
+44[label="44: Statement x___0 = 0;"];
+52 -> 72 [ label = "Test (1,false)", color = "black" ];
+52[label="52: Statement pthread_mutex_lock(& __global_lock);"];
+52 -> 61 [ label = "Test (1,false)", color = "black" ];
+52[label="52: Statement pthread_mutex_lock(& __global_lock);"];
+52 -> 53 [ label = "Proc 'pthread_mutex_lock(& __global_lock)'", color = "green" ];
+52[label="52: Statement pthread_mutex_lock(& __global_lock);"];
+72 -> 10446624154 [ label = "Test (1,false)", color = "black" ];
+72[label="72: Statement pthread_mutex_lock(& __global_lock);"];
+72 -> 73 [ label = "Proc 'pthread_mutex_lock(& __global_lock)'", color = "green" ];
+72[label="72: Statement pthread_mutex_lock(& __global_lock);"];
+10446624154 -> 442 [ label = "Ret (None, main)", color = "black" ];
+10446624154[label="10446624154: Statement return;"];
+73 -> 74 [ label = "Proc 'assert(x___0 == 0)'", color = "green" ];
+73[label="73: Statement assert(x___0 == 0);"];
+74 -> 77 [ label = "Proc 'pthread_mutex_unlock(& __global_lock)'", color = "green" ];
+74[label="74: Statement pthread_mutex_unlock(& __global_lock);"];
+77 -> 442 [ label = "Ret (Some 0, main)", color = "green" ];
+77[label="77: Statement return (0);"];
+61 -> 72 [ label = "Test (1,false)", color = "black" ];
+61[label="61: Statement pthread_mutex_lock(& __global_lock);"];
+61 -> 62 [ label = "Proc 'pthread_mutex_lock(& __global_lock)'", color = "green" ];
+61[label="61: Statement pthread_mutex_lock(& __global_lock);"];
+62 -> 63 [ label = "Assign 'x___0 = x___0 - 1' ", color = "green" ];
+62[label="62: Statement x___0 --;"];
+63 -> 72 [ label = "Proc 'pthread_mutex_unlock(& __global_lock)'", color = "green" ];
+63[label="63: Statement pthread_mutex_unlock(& __global_lock);"];
+53 -> 54 [ label = "Assign 'x___0 = x___0 + 1' ", color = "green" ];
+53[label="53: Statement x___0 ++;"];
+54 -> 61 [ label = "Proc 'pthread_mutex_unlock(& __global_lock)'", color = "green" ];
+54[label="54: Statement pthread_mutex_unlock(& __global_lock);"];
+437 -> 39 [ label = "Entry assume_abort_if_not", color = "green" ];
+437[label="437: FunctionEntry assume_abort_if_not"];
+39 -> 41 [ label = "Test (! cond,true)", color = "green" ];
+39[label="39: Statement if (! cond) {
+            {
+            abort();
+            }
+}"];
+39 -> 42 [ label = "Test (! cond,false)", color = "green" ];
+39[label="39: Statement if (! cond) {
+            {
+            abort();
+            }
+}"];
+41 -> 42 [ label = "Proc 'abort()'", color = "green" ];
+41[label="41: Statement abort();"];
+42 -> 437 [ label = "Ret (None, assume_abort_if_not)", color = "green" ];
+42[label="42: Statement return;"];
+}

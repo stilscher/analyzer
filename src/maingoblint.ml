@@ -482,8 +482,8 @@ let main =
           Printf.printf "Execution time: %fs\n" (Sys.time() -. t);
           fx in
         
-        (* List.iter testDuplicateFile testFiles; *)
-        testDuplicateFile "tests/regression/28-race_reach/60-invariant_racefree.c"
+        (* List.iter testDuplicateFile testFiles *)
+        testDuplicateFile "src/incremental/improvements/tests/ambig_false_edges_prog.c"
 
         (*
         let getFile fnames = Cilfacade.init();
