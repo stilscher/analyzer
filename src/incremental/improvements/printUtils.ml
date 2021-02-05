@@ -21,6 +21,8 @@ let print_stmtkind k = match k with
   | TryExcept _ -> printf "Statement kind: TryExcept\n"
   | ComputedGoto _ -> printf "Computed Goto\n"
 
+let label_to_string l = Pretty.sprint 200 (d_label () l)
+
   (*
     let _, cfg = MyCFG.createCFG file1 in 
     let [([(l1, e1)], nd1)] = Cfg1.next en1 in

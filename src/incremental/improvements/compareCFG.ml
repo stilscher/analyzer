@@ -18,6 +18,13 @@ module DiffS = Set.Make (
   end  
 )
 
+module FunDiffMap = Map.Make(
+  struct
+    let compare = compare
+    type t = node
+  end
+)
+
 let waitingList : (node * node) t = Queue.create ()
 
 let print_queue q = 
@@ -25,6 +32,13 @@ let print_queue q =
   printf "queue: "; if Queue.is_empty q then printf "empty\n" else Queue.iter f q
 
 let node_to_string n = Pretty.sprint 200 (pretty_node () n)
+let edge_to_string e = Pretty.sprint 200 (pretty_edge () e)
+let node_to_id_string n = 
+  let id = match n with
+    | Statement s -> s.sid
+    | FunctionEntry f -> f.vid
+    | Function f -> f.vid
+    in string_of_int id
 
 let print_std_set s = 
   let print_elem ((fromNode1, fromNode2), (edgeList1, edgeList2), (toNode1, toNode2)) = 
@@ -120,6 +134,47 @@ let eq_edge_list xs ys = CompareAST.eq_list eq_edge xs ys
 
 let to_edge_list ls = List.map (fun (loc, edge) -> edge) ls
 
+let print_min_cfg_coloring (module Cfg : CfgForward) funDiff edgeColoring fileName =
+  let out = open_out fileName in
+
+  let dotDataForFun entryNode stdSet diffSet =
+    let rec dfs fromNode (vis, acc) =
+      if List.mem fromNode vis then (vis, acc) 
+      else
+        let nodeLabel = node_to_id_string fromNode ^ ": " ^ node_to_string fromNode in
+        let edgeLabel edgeList = List.fold_right (fun (loc, e) a -> edge_to_string e ^ a) edgeList "" in 
+        let print_edge edgeList toNode = node_to_id_string fromNode ^ " -> " ^ node_to_id_string toNode
+          ^ " [ label = \"" ^ edgeLabel edgeList ^ "\", color = \"" ^ edgeColoring fromNode (to_edge_list edgeList) toNode stdSet diffSet ^ "\" ];\n"
+          ^ node_to_id_string fromNode ^ "[label=\"" ^ nodeLabel ^ "\"];\n" in
+        let succNodes = List.map (fun (e,n) -> n) (Cfg.next fromNode) in
+        let ext_acc = List.fold_right (fun (e,n) a -> a ^ (print_edge e n)) (Cfg.next fromNode) acc in
+        List.fold_right dfs succNodes (fromNode :: vis, ext_acc) in
+    let _, dotEdges = dfs entryNode ([],"") in
+    dotEdges in
+  
+  let dotContent = FunDiffMap.fold (fun n (ss, ds) a -> dotDataForFun n ss ds ^ a) funDiff "" in
+  Printf.fprintf out "%s" ("digraph cfg {\n" ^ dotContent ^ "}");
+  flush out;
+  close_out_noerr out
+
+let print_min_cfg_diff_2 (module Cfg : CfgForward) funDiff = 
+  let edgeColoring fromNode edgeList toNode stdSet diffSet = 
+    let compStdSetEntry2 ((_, fn2), (_, el2), (_,tn2)) = Node.equal fn2 fromNode && Node.equal tn2 toNode && CompareAST.eq_list eq_edge edgeList el2 in
+    let inStd = StdS.exists compStdSetEntry2 stdSet in 
+    let compDiffSetEntry2 ((_, fn2), el2, tn2) = Node.equal fn2 fromNode && Node.equal tn2 toNode && CompareAST.eq_list eq_edge edgeList el2 in
+    let inDiff = DiffS.exists compDiffSetEntry2 diffSet in  
+    if inStd && inDiff then "blue"
+    else if inStd then "green" 
+    else if inDiff then "red" else "black" in
+print_min_cfg_coloring (module Cfg) funDiff edgeColoring "cfg_2_diff.dot"
+
+let print_min_cfg_diff_1 (module Cfg : CfgForward) funDiff =
+  let edgeColoring fromNode edgeList toNode stdSet diffSet = 
+    let compStdSetEntry1 ((fn1,_), (el1,_), (tn1,_)) = Node.equal fn1 fromNode && Node.equal tn1 toNode && CompareAST.eq_list eq_edge edgeList el1 in
+    let inStd = StdS.exists compStdSetEntry1 stdSet in 
+    if inStd then "green" else "black" in
+print_min_cfg_coloring (module Cfg) funDiff edgeColoring "cfg_1_diff.dot"
+
 let compare (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 =
     let rec compareNext (stdSet, diffSet) =
       (*printf "\ncompare next in waiting list\n";
@@ -130,7 +185,8 @@ let compare (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 =
       if Queue.is_empty waitingList then (stdSet, diffSet) 
       else
         let (fromNode1, fromNode2) = Queue.take waitingList in
-        (* printf "fromNode2: %s\n" (node_to_string fromNode2); *)
+        printf "\n";
+        (* printf "\nfromNode2: %s\n" (node_to_string fromNode2); *)
         let outList1 = Cfg1.next fromNode1 in
         let outList2 = Cfg2.next fromNode2 in
                
@@ -140,28 +196,26 @@ let compare (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 =
             match ls1 with
             | [] -> let diffSet' = DiffS.add ((fromNode1, fromNode2), edgeList2, toNode2) diffSet in (stdSet, diffSet')
             | (locEdgeList1, toNode1) :: ls1' ->
+              printf "%s -> %s, %s -> %s\n" (node_to_id_string fromNode1) (node_to_id_string toNode1) (node_to_id_string fromNode2) (node_to_id_string toNode2);
               let edgeList1 = to_edge_list locEdgeList1 in
               if eq_node (toNode1, fun1) (toNode2, fun2) && eq_edge_list edgeList1 edgeList2 then
+                (printf "match\n";
                 ((let notIn = StdS.for_all 
-                    (fun (fromNodes', edges, (toNode1', toNode2')) -> not (Node.equal toNode1 toNode1') || not (Node.equal toNode2 toNode2')) stdSet in
-                    (* printf "%b\n" notIn; *)
-                  if notIn then Queue.add (toNode1, toNode2) waitingList);
+                    (fun (fromNodes', edges, (toNode1', toNode2')) -> not (Node.equal toNode1 toNode1' && Node.equal toNode2 toNode2')) stdSet in
+                  if notIn then printf "add to waitingList, "; Queue.add (toNode1, toNode2) waitingList);
                   let stdSet' = StdS.add ((fromNode1, fromNode2), (edgeList1, edgeList2), (toNode1, toNode2)) stdSet
-                in (stdSet', diffSet))
-              else aux ls1' stdSet diffSet in
-          ( (* printf "size of outList1 %d\n" (List.length ls1); *) aux ls1 stdSet diffSet) in
+                in printf "add to stdSet\n"; (stdSet', diffSet)))
+              else (printf "no match\n"; 
+              aux ls1' stdSet diffSet) in
+          aux ls1 stdSet diffSet in
         
         let rec iterOuts ls2 stdSet diffSet = 
-          (* printf "iterate over outgoing edges of graph 2, %d more to go\n" (List.length ls2); *)
           match ls2 with
           | [] -> (stdSet, diffSet)
           | (locEdgeList2, toNode2) :: ls2' ->
-              (* printf "toNode2: %s\n" (node_to_string toNode2);
-              printf "edges: %s\n" (Pretty.sprint 200 (pretty_edges () locEdgeList2)); *)
               let edgeList2 = to_edge_list locEdgeList2 in
               let (stdSet', (diffSet' : DiffS.t)) = findEquiv (edgeList2, toNode2) outList1 stdSet diffSet in
             iterOuts ls2' stdSet' diffSet' in
-      (* printf "size of outList2 %d\n" (List.length outList2); *)
       compareNext (iterOuts outList2 stdSet diffSet) in
     
     let initSets = (StdS.empty, DiffS.empty) in
@@ -192,11 +246,13 @@ let compare_all_funs file1 file2 =
       match funs1, funs2 with
       | [], [] -> acc
       | f1::funs1', f2::funs2' -> 
-          (* printf "\ncompare %s and %s\n" (f1.svar.vname) (f2.svar.vname); *)
-          aux funs1' funs2' (compare (module Cfg1) (module Cfg2) f1 f2 :: acc)
+          assert (f1.svar.vname = f2.svar.vname);
+          let (stdSet, diffSet) = compare (module Cfg1) (module Cfg2) f1 f2 in
+          aux funs1' funs2' (FunDiffMap.add (FunctionEntry f1.svar) (stdSet, diffSet) acc)
       | _, _ -> raise (Invalid_argument "Function to be compared not in both files") in
-    aux (sort funs1) (sort funs2) [] in
+    aux (sort funs1) (sort funs2) FunDiffMap.empty in
   
   assert (List.length funs1 = List.length funs2);
-  (* printf "# of functions to compare: %d\n" (List.length funs2); *)
+  print_min_cfg_diff_2 (module Cfg2) iterFuns;
+  print_min_cfg_diff_1 (module Cfg1) iterFuns;
   iterFuns

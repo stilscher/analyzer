@@ -428,7 +428,7 @@ let do_stats () =
 let testDuplicateFile fpath =
   if Str.string_match (Str.regexp ".+\\.c$") fpath 0 then
 
-  let manualExclude = [] in
+  let manualExclude = ["08-asm_nop.c"] in
   let exclude = let chan = open_in fpath in
     try (let firstLine = input_line chan in
       let b = Str.string_match (Str.regexp "\\(//\\( \\)?SKIP\\)\\|\\(//\\( \\)?PARAM\\)") firstLine 0 in close_in chan; b)
@@ -441,9 +441,9 @@ let testDuplicateFile fpath =
       preprocess_files () |> merge_preprocessed in
     let file1 = getFile fpath
     and file2 = getFile fpath in 
-    let ls = CompareCFG.compare_all_funs file1 file2 in
-    let handleDiff (std, diff) = if DiffS.cardinal diff > 0 then (printf "\n%s\n" fpath; print_diff_set diff) in
-    List.iter handleDiff ls
+    let res = CompareCFG.compare_all_funs file1 file2 in
+    let handleDiff node (std, diff) = if DiffS.cardinal diff > 0 then (printf "\n%s\n" fpath; print_diff_set diff) in
+    FunDiffMap.iter handleDiff res
     (* assert (List.for_all (fun (std, diff) -> DiffS.cardinal diff = 0) ls)*)
 
 let testFiles = 
@@ -483,6 +483,9 @@ let main =
           fx in
         
         (* List.iter testDuplicateFile testFiles; *)
+        testDuplicateFile "tests/regression/28-race_reach/60-invariant_racefree.c"
+
+        (*
         let getFile fnames = Cilfacade.init();
           cFileNames := fnames;
           create_temp_dir ();
@@ -496,11 +499,8 @@ let main =
           (sum n 0.) /. n in
         printf "%f\n" (avg_time 100000.)
         (* time (fun x -> let _, _ = MyCFG.createCFG x in ()) file; *)
-
-        (*
-        testDuplicateFile "tests/regression/28-race_reach/60-invariant_racefree.c";
-        testDuplicateFile "tests/regression/00-sanity/08-asm_nop.c" *)
-
+        *)
+        
         (*
         parse_arguments ();
         check_arguments ();
