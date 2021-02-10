@@ -425,8 +425,20 @@ let do_stats () =
     Stats.print (Messages.get_out "timing" Legacy.stderr) "Timings:\n";
     flush_all ()
 
+let testCFGComparison fpath1 fpath2 =
+  let getFile fname = Cilfacade.init();
+    cFileNames := [fname];
+    create_temp_dir ();
+    preprocess_files () |> merge_preprocessed in
+  let file1 = getFile fpath1
+    and file2 = getFile fpath2 in 
+    let res = CompareCFG.compare_all_funs file1 file2 in
+    let handleDiff node (std, diff) = if DiffS.cardinal diff > 0 then (printf "\n%s\n" fpath1; print_diff_set diff) in
+    FunDiffMap.iter handleDiff res
+    (* assert (List.for_all (fun (std, diff) -> DiffS.cardinal diff = 0) ls)*)
+
 let testDuplicateFile fpath =
-  if Str.string_match (Str.regexp ".+\\.c$") fpath 0 then
+    if Str.string_match (Str.regexp ".+\\.c$") fpath 0 then
 
   let manualExclude = ["08-asm_nop.c"] in
   let exclude = let chan = open_in fpath in
@@ -435,16 +447,7 @@ let testDuplicateFile fpath =
     with End_of_file -> (close_in chan; false) in
 
   if not exclude && not (List.mem (Filename.basename fpath) manualExclude) then
-    let getFile fname = Cilfacade.init();
-      cFileNames := [fname];
-      create_temp_dir ();
-      preprocess_files () |> merge_preprocessed in
-    let file1 = getFile fpath
-    and file2 = getFile fpath in 
-    let res = CompareCFG.compare_all_funs file1 file2 in
-    let handleDiff node (std, diff) = if DiffS.cardinal diff > 0 then (printf "\n%s\n" fpath; print_diff_set diff) in
-    FunDiffMap.iter handleDiff res
-    (* assert (List.for_all (fun (std, diff) -> DiffS.cardinal diff = 0) ls)*)
+    testCFGComparison fpath fpath
 
 let testFiles = 
   let baseDir = "tests/regression" in
@@ -483,7 +486,9 @@ let main =
           fx in
         
         (* List.iter testDuplicateFile testFiles *)
-        testDuplicateFile "src/incremental/improvements/tests/ambig_false_edges_prog.c"
+        (* testDuplicateFile "src/incremental/improvements/tests/ambig_false_edges_prog.c" *)
+
+        testCFGComparison "src/incremental/improvements/tests/test_prog_1.c" "src/incremental/improvements/tests/test_prog_2.c"
 
         (*
         let getFile fnames = Cilfacade.init();
