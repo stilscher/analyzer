@@ -425,17 +425,22 @@ let do_stats () =
     Stats.print (Messages.get_out "timing" Legacy.stderr) "Timings:\n";
     flush_all ()
 
+(*
+let diff_and_rename' file oldFile =
+  let (changes, maxIds) = compareCilFiles oldFile file in
+*)
+
 let testCFGComparison fpath1 fpath2 =
   let getFile fname = Cilfacade.init();
     cFileNames := [fname];
     create_temp_dir ();
     preprocess_files () |> merge_preprocessed in
   let file1 = getFile fpath1
-    and file2 = getFile fpath2 in 
-    let res = CompareCFG.compare_all_funs file1 file2 in
-    let handleDiff node (std, diff) = if DiffS.cardinal diff > 0 then (printf "\n%s\n" fpath1; print_diff_set diff) in
-    FunDiffMap.iter handleDiff res
-    (* assert (List.for_all (fun (std, diff) -> DiffS.cardinal diff = 0) ls)*)
+  and file2 = getFile fpath2 in
+  let res = CompareCFG.compare_all_funs file1 file2 in
+  let handleDiff node (std, diff) = if DiffS.cardinal diff > 0 then (printf "\n%s\n" fpath1; print_diff_set diff) in
+  FunDiffMap.iter handleDiff res
+  (* assert (List.for_all (fun (std, diff) -> DiffS.cardinal diff = 0) ls) *)
 
 let testDuplicateFile fpath =
     if Str.string_match (Str.regexp ".+\\.c$") fpath 0 then
@@ -465,47 +470,67 @@ let store_load_cfg (cfg : ((Cil.location * MyCFG.edge) list * Node.node) MyCFG.H
   | None -> printf "no cfg loaded\n"
   | Some c -> MyCFG.print c
 
-(** the main function *)
 let main =
   let main_running = ref false in fun () ->
     if not !main_running then (
       main_running := true;
       try
         Stats.reset Stats.SoftwareTimer;
-
-        let time_it action arg =
-          let start_time = Sys.time () in
-          ignore (action arg);
-          let finish_time = Sys.time () in
-          finish_time -. start_time in
-
-        let time f x =
-          let t = Sys.time() in
-          let fx = f x in
-          Printf.printf "Execution time: %fs\n" (Sys.time() -. t);
-          fx in
         
         (* List.iter testDuplicateFile testFiles *)
-        (* testDuplicateFile "src/incremental/improvements/tests/ambig_false_edges_prog.c" *)
-
-        testCFGComparison "src/incremental/improvements/tests/test_prog_1.c" "src/incremental/improvements/tests/test_prog_2.c"
-
-        (*
-        let getFile fnames = Cilfacade.init();
-          cFileNames := fnames;
+        (* testDuplicateFile "src/incremental/improvements/tests/ambig_false_edges_prog2.c"; *)
+        
+        let getFile fname = Cilfacade.init();
+          cFileNames := [fname];
           create_temp_dir ();
           preprocess_files () |> merge_preprocessed in
+        let file1 = getFile "src/incremental/improvements/tests/instr_list_prog_1.c"
+        and file2 = getFile "src/incremental/improvements/tests/instr_list_prog_2.c" in
+        let printCFG file filename = 
+          let cfgF, _ = MyCFG.getCFG file in
+          let module Cfg: MyCFG.CfgForward = struct let next = cfgF end in
+          let funs = List.filter_map (fun g -> match g with | Cil.GFun (f,_) -> Some (MyCFG.FunctionEntry f.svar) | _ -> None) file.globals in
+          print_min_cfg_coloring (module Cfg : MyCFG.CfgForward) funs (fun _ _ _ _ -> "black") (fun _ _ -> "black") filename in
+        printCFG file1 "cfg_1.dot";
+        printCFG file2 "cfg_2.dot";
+        let map1 = Hashtbl.create 113 in
+        List.iter (fun g -> try Hashtbl.add map1 (CompareCFG.identifier_of_global g) (g,"1") with _ -> ()) file1.globals;
+        let maxIds1 = 
+          let vid_max = ref 0 in
+          let sid_max = ref 0 in
+          let update_vid_max vid =
+            if vid > !vid_max then vid_max := vid
+          in
+          let update_sid_max sid =
+            if sid > !sid_max then sid_max := sid
+          in
+          let update_ids (glob: Cil.global) = match glob with
+            | GFun (fn, loc) -> List.iter (fun (s : Cil.stmt) -> update_sid_max s.sid) fn.sallstmts;
+                List.iter (List.iter (fun (v : Cil.varinfo) -> update_vid_max v.vid)) [fn.slocals; fn.sformals]
+            | GVar (v,_,_) -> update_vid_max v.vid
+            | GVarDecl (v,_) -> update_vid_max v.vid
+            | _ -> ()
+          in
+          List.iter update_ids file1.globals;
+          ({max_sid = !sid_max; max_vid = !vid_max} : UpdateCfg.max_ids) in
+        let changes = CompareCFG.compareCilFiles file1 file2 in
+        printf "#changed globals: %d\n" (List.length changes.changed);
+        printf "#unchanged globals: %d\n" (List.length changes.unchanged);
+        printf "#added globals: %d\n" (List.length changes.added);
+        printf "#removed globals: %d\n" (List.length changes.removed);
+        List.iter (fun cg -> printf "%s -> %s\n" (identifier_of_global cg.old).name (identifier_of_global cg.current).name (*;
+          match cg.diff with | None -> () | Some d -> List.iter (fun n -> printf "%s, " (node_to_string n)) d.primChangedNodes *)) changes.changed; 
+        (* printf "\n"; *)
+        
+        let updateMap m = List.iter (fun (glob: Cil.global) ->  Hashtbl.replace m (identifier_of_global glob) (glob, "2")) (List.map (fun a -> a.current) changes.changed);
+          List.iter (fun (glob: Cil.global) ->  Hashtbl.replace m (identifier_of_global glob) (glob, "2")) changes.added;
+          m in
+        let map2 = updateMap map1 in
+        let maxIds2 = UpdateCfg.update_ids file1 maxIds1 file2 map2 "2" changes in
+        printf "maxIds1: %d, %d\n" maxIds1.max_sid maxIds1.max_vid;
+        printf "maxIds2: %d, %d\n" maxIds2.max_sid maxIds2.max_vid;
+        printCFG file2 "cfg_2_upd.dot";
 
-        let file = getFile ["tests/regression/01-cpa/01-expressions.c"] in
-        
-        printf "avg time createCFG\n";
-        let avg_time n = 
-          let rec sum i acc = if i <= 0.0 then acc else sum (i -. 1.) ((time_it (fun x -> let _, _ = MyCFG.createCFG x in ()) file) +. acc) in
-          (sum n 0.) /. n in
-        printf "%f\n" (avg_time 100000.)
-        (* time (fun x -> let _, _ = MyCFG.createCFG x in ()) file; *)
-        *)
-        
         (*
         parse_arguments ();
         check_arguments ();

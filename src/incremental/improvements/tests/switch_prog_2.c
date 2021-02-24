@@ -6,6 +6,7 @@ int main (int p) {
   switch (p) {
     case 0: return 111;
     case 1: x = x + 1;
+    case 2: return (x+4);
     case 3: break;
     default: return 222;
   }
