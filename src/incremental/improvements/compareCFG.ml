@@ -66,7 +66,6 @@ let eq_list eq xs ys =
     List.for_all (fun (a,b) -> eq a b) (List.combine xs ys)
   with Invalid_argument _ -> false
 
-
 let eqB (a: Cil.block) (b: Cil.block) =
   a.Cil.battrs = b.Cil.battrs && a.bstmts = b.bstmts
 
@@ -493,11 +492,18 @@ let compareCfgs (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 
           | [] -> (stdSet, diffSet)
           | (locEdgeList2, toNode2) :: ls2' ->
               let edgeList2 = to_edge_list locEdgeList2 in
-              (* TODO: differentiate between the duplicate Test(1,false) edges case and a single occurence *)
-              let isActualEdge = match List.hd edgeList2 with
-                | Test (p,b) -> not (p = Cil.one && b = false)
-                | _ -> true in
-              let (stdSet', diffSet') = if isActualEdge then findEquiv (edgeList2, toNode2) outList1 stdSet diffSet else (stdSet, diffSet) in
+              (* Differentiate between a possibly duplicate Test(1,false) edge and a single occurence. In the first
+              case the edge is directly added to the diff set to avoid undetected ambiguities during the recursive 
+              call. *)
+              let testFalseEdge edge = match edge with
+                | Test (p,b) -> p = Cil.one && b = false
+                | _ -> false in
+              let posAmbigEdge edgeList = let findTestFalseEdge (ll,_) = testFalseEdge (snd (List.hd ll)) in
+                let numDuplicates l = List.length (List.find_all findTestFalseEdge l) in
+                testFalseEdge (List.hd edgeList) && (numDuplicates outList2 > 1 || numDuplicates outList1 > 1) in
+              let (stdSet', diffSet') = if posAmbigEdge edgeList2 
+                then (stdSet, DiffS.add ((fromNode1, fromNode2), edgeList2, toNode2) diffSet) 
+                else findEquiv (edgeList2, toNode2) outList1 stdSet diffSet in
             iterOuts ls2' stdSet' diffSet' in
       compareNext (iterOuts outList2 stdSet diffSet) in
     

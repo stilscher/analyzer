@@ -484,8 +484,8 @@ let main =
           cFileNames := [fname];
           create_temp_dir ();
           preprocess_files () |> merge_preprocessed in
-        let file1 = getFile "src/incremental/improvements/tests/instr_list_prog_1.c"
-        and file2 = getFile "src/incremental/improvements/tests/instr_list_prog_2.c" in
+        let file1 = getFile "src/incremental/improvements/tests/ambig_false_edges_prog2_1.c"
+        and file2 = getFile "src/incremental/improvements/tests/ambig_false_edges_prog2_2.c" in
         let printCFG file filename = 
           let cfgF, _ = MyCFG.getCFG file in
           let module Cfg: MyCFG.CfgForward = struct let next = cfgF end in
