@@ -162,6 +162,10 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
   let update_ids (glob: global) =
     update_vids glob; update_sids glob;
   in
+  (* Update the sid_max based on the ids in the new file to avoid duplications that could otherwise occur because not 
+  all node ids in a function are updated *)
+  Cil.iterGlobals new_file update_sids;
+
   List.iter reset_globals changes.unchanged;
   List.iter reset_changed_globals changes.changed;
   List.iter update_globals changes.added;

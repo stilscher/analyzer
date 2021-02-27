@@ -533,6 +533,9 @@ let compareFun (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 =
   (* printf "unchanged: ";
   List.iter (fun (n1,n2) -> printf "(%s,%s), " (node_to_string n1) (node_to_string n2)) unchanged;
   printf "\n";
+    printf "primChanged: ";
+  List.iter (fun n -> printf "%s, " (node_to_string n)) primChanged;
+  printf "\n";
   printf "changed: ";
   List.iter (fun n -> printf "%s, " (node_to_string n)) changed;
   printf "\n"; *)
