@@ -88,14 +88,14 @@ struct
       Hashtbl.clear !heap_vars;
       let incremental_mode = GobConfig.get_string "exp.incremental.mode" in
       if incremental_mode <> "off" then (
-        match Serialize.load_heap_vars () with
+        match SerializeCFG.load_heap_vars () with
         | Some (h,v) -> heap_hash := h; heap_vars := v
         | None -> ()
       )
 
     let finalize () =
       let incremental_mode = GobConfig.get_string "exp.incremental.mode" in
-      if incremental_mode <> "off" then Serialize.save_heap_vars (!heap_hash, !heap_vars)
+      if incremental_mode <> "off" then SerializeCFG.save_heap_vars (!heap_hash, !heap_vars)
 end
 
 let _ =

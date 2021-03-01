@@ -473,6 +473,17 @@ let getCFG (file: file) : cfg * cfg =
   if get_bool "justcfg" then print cfgB;
   H.find_all cfgF, H.find_all cfgB
 
+let getCFGTbl (file: file) =
+  let cfgF, cfgB = createCFG file in
+  let cfgF, cfgB =
+    if get_bool "exp.mincfg" then
+      Stats.time "minimizing the cfg" minimizeCFG (cfgF, cfgB)
+    else
+      (cfgF, cfgB)
+  in
+  if get_bool "justcfg" then print cfgB;
+  cfgF, cfgB
+
 let get_containing_function (stmt: stmt): fundec = Hashtbl.find stmt_index_hack stmt.sid
 
 let getFun (node: node) =

@@ -425,10 +425,55 @@ let do_stats () =
     Stats.print (Messages.get_out "timing" Legacy.stderr) "Timings:\n";
     flush_all ()
 
-(*
-let diff_and_rename' file oldFile =
-  let (changes, maxIds) = compareCilFiles oldFile file in
-*)
+let update_map' old_file new_file oldCfgTbl newCfgTbl =
+  let dir = SerializeCFG.gob_directory () in
+  VersionLookupCFG.restore_map dir old_file new_file oldCfgTbl newCfgTbl
+
+let store_map' updated_map max_ids = (* Creates the directory for the commit *)
+  match SerializeCFG.current_commit_dir () with
+  | Some commit_dir ->
+    let map_file_name = Filename.concat commit_dir SerializeCFG.version_map_filename in
+    SerializeCFG.marshal (updated_map, max_ids) map_file_name
+  | None -> ()
+
+let diff_and_rename' file =
+  SerializeCFG.src_direcotry := src_path ();
+
+  let change_info = (match SerializeCFG.current_commit () with
+      | Some current_commit -> ((* "put the preparation for incremental analysis here!" *)
+          let cfgTbl = MyCFG.getCFGTbl file |> fst in
+          if get_bool "dbg.verbose" then print_endline ("incremental mode running on commit " ^ current_commit);
+          let (changes, last_analyzed_commit) =
+            (match SerializeCFG.last_analyzed_commit () with
+             | Some last_analyzed_commit -> (match SerializeCFG.load_latest_cfg !cFileNames with
+                 | Some (file2, cfgTbl2) ->
+                   let (version_map, changes, max_ids) = update_map' file2 file cfgTbl2 cfgTbl in
+                   let max_ids = UpdateCfg.update_ids file2 max_ids file version_map current_commit changes in
+                   store_map' version_map max_ids;
+                   (changes, last_analyzed_commit)
+                 | None -> failwith "No cfg.data from previous analysis found!"
+               )
+             | None -> (match SerializeCFG.current_commit_dir () with
+                 | Some commit_dir ->
+                   let (version_map, max_ids) = VersionLookupCFG.create_map file current_commit in
+                   store_map' version_map max_ids;
+                   (CompareCFG.empty_change_info (), "")
+                 | None -> failwith "Directory for storing the results of the current run could not be created!")
+            ) in
+          SerializeCFG.save_cfg file cfgTbl;
+          let analyzed_commit_dir = Filename.concat (data_path ()) last_analyzed_commit in
+          let current_commit_dir = Filename.concat (data_path ()) current_commit in
+          Cilfacade.print_to_file (Filename.concat current_commit_dir "cil.c") file;
+          if "" <> last_analyzed_commit then (
+            CompareCFG.check_file_changed analyzed_commit_dir current_commit_dir;
+            (* Note: Global initializers/start state changes are not considered here: *)
+            CompareCFG.check_any_changed changes
+          );
+          (* {Analyses.changes = changes; analyzed_commit_dir; current_commit_dir} *)
+          (changes, analyzed_commit_dir, current_commit_dir)
+        )
+      | None -> failwith "Failure! Working directory is not clean")
+  in change_info
 
 let testCFGComparison fpath1 fpath2 =
   let getFile fname = Cilfacade.init();
@@ -463,9 +508,9 @@ let testFiles =
   let toFullFileNameList dir = Array.map (fun name -> Filename.concat dir name) (Sys.readdir dir) |> Array.to_list in
   Array.fold_right (fun dir acc -> (toFullFileNameList dir) @ acc) testDirs []
 
-let store_load_cfg (cfg : ((Cil.location * MyCFG.edge) list * Node.node) MyCFG.H.t) =
-  SerializeCFG.save_cfg cfg;
-  let (r : ((Cil.location * MyCFG.edge) list * Node.node) MyCFG.H.t option) = SerializeCFG.load_cfg "cfg.data" in 
+let store_load_cfg file (cfg : ((Cil.location * MyCFG.edge) list * Node.node) MyCFG.H.t) =
+  SerializeCFG.save_cfg file cfg;
+  let (r : ((Cil.location * MyCFG.edge) list * Node.node) MyCFG.H.t option) = SerializeCFG.load_latest_cfg ["cfg.data"] in 
   match r with
   | None -> printf "no cfg loaded\n"
   | Some c -> MyCFG.print c
@@ -477,15 +522,50 @@ let main =
       try
         Stats.reset Stats.SoftwareTimer;
         
-        (* List.iter testDuplicateFile testFiles *)
-        (* testDuplicateFile "src/incremental/improvements/tests/ambig_false_edges_prog2.c"; *)
-        
+        Cilfacade.init ();
+        parse_arguments ();
+        check_arguments ();
+        handle_extraspecials ();
+        create_temp_dir ();
+        handle_flags ();
+        if get_bool "dbg.verbose" then (
+          print_endline (localtime ());
+          print_endline command;
+        );
+        let file = preprocess_files () |> merge_preprocessed in
+
+        (*
         let getFile fname = Cilfacade.init();
           cFileNames := [fname];
           create_temp_dir ();
           preprocess_files () |> merge_preprocessed in
-        let file1 = getFile "src/incremental/improvements/tests/ambig_false_edges_prog2_1.c"
-        and file2 = getFile "src/incremental/improvements/tests/ambig_false_edges_prog2_2.c" in
+        let file = getFile "/home/sarah/Studium/WS_20-21/MA/figlet/figlet.c" in
+        *)
+        let (changes, analyzed_commit_dir, current_commit_dir) = diff_and_rename' file in
+        Format.printf "%s, %s\n" analyzed_commit_dir current_commit_dir;
+        
+        let print_changes changes =
+          Format.printf "added:\n";
+          List.iter (fun glob -> Format.printf "%s, " (identifier_of_global glob).name) changes.added;
+          Format.printf "\nremoved:\n";
+          List.iter (fun glob -> Format.printf "%s, " (identifier_of_global glob).name) changes.removed;
+          Format.printf "\nchanged:\n";
+          List.iter (fun glob -> Format.printf "%s -> %s, " (identifier_of_global glob.old).name (identifier_of_global glob.current).name) changes.changed;
+          Format.printf "\nunchanged:\n";
+          List.iter (fun glob -> Format.printf "%s, " (identifier_of_global glob).name) changes.unchanged;
+          Format.printf "\n"; 
+        in
+
+        let print_num_changes changes =
+          Format.printf "added: %d\n" (List.length changes.added);
+          Format.printf "removed: %d\n" (List.length changes.removed);
+          Format.printf "changed: %d\n" (List.length changes.changed);
+          Format.printf "unchanged: %d\n" (List.length changes.unchanged);
+        in
+
+        print_num_changes changes
+
+        (* let cfgTbl1, cfgTbl2 = MyCFG.getCFGTbl file1 |> fst, MyCFG.getCFGTbl file2 |> fst in
         let printCFG file filename = 
           let cfgF, _ = MyCFG.getCFG file in
           let module Cfg: MyCFG.CfgForward = struct let next = cfgF end in
@@ -513,7 +593,7 @@ let main =
           in
           List.iter update_ids file1.globals;
           ({max_sid = !sid_max; max_vid = !vid_max} : UpdateCfg.max_ids) in
-        let changes = CompareCFG.compareCilFiles file1 file2 in
+        let changes = CompareCFG.compareCilFiles file1 file2 cfgTbl1 cfgTbl2 in
         printf "#changed globals: %d\n" (List.length changes.changed);
         printf "#unchanged globals: %d\n" (List.length changes.unchanged);
         printf "#added globals: %d\n" (List.length changes.added);
@@ -529,7 +609,8 @@ let main =
         let maxIds2 = UpdateCfg.update_ids file1 maxIds1 file2 map2 "2" changes in
         printf "maxIds1: %d, %d\n" maxIds1.max_sid maxIds1.max_vid;
         printf "maxIds2: %d, %d\n" maxIds2.max_sid maxIds2.max_vid;
-        printCFG file2 "cfg_2_upd.dot";
+        printCFG file2 "cfg_2_upd.dot"
+        *)
 
         (*
         parse_arguments ();
