@@ -456,13 +456,13 @@ end
 type increment_data = {
   analyzed_commit_dir: string;
   current_commit_dir: string;
-  changes: CompareAST.change_info
+  changes: CompareCFG.change_info
 }
 
 let empty_increment_data () = {
   analyzed_commit_dir = "";
   current_commit_dir = "";
-  changes = CompareAST.empty_change_info ()
+  changes = CompareCFG.empty_change_info ()
 }
 
 (** A side-effecting system. *)

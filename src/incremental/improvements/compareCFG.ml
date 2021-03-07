@@ -598,8 +598,10 @@ let compare_all_funs file1 file2 =
 
 (* Returns a list of changed functions *)
 let compareCilFiles (oldAST: file) (newAST: file) oldCfgTbl newCfgTbl =
-  let module OldCfg: MyCFG.CfgForward = struct let next = H.find_all oldCfgTbl end in
-  let module NewCfg: MyCFG.CfgForward = struct let next = H.find_all newCfgTbl end in
+  let oldCfg, _ = MyCFG.getCFG oldAST in
+  let newCfg, _ = MyCFG.getCFG newAST in
+  let module OldCfg: MyCFG.CfgForward = struct let next = oldCfg end in
+  let module NewCfg: MyCFG.CfgForward = struct let next = newCfg end in
 
   let addGlobal map global  =
     try

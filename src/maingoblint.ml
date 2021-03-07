@@ -381,6 +381,7 @@ let store_map updated_map max_ids = (* Creates the directory for the commit *)
   | None -> ()
 
 (* Detects changes and renames vids and sids. *)
+(*
 let diff_and_rename file =
   Serialize.src_direcotry := src_path ();
 
@@ -417,6 +418,7 @@ let diff_and_rename file =
         )
       | None -> failwith "Failure! Working directory is not clean")
   in change_info
+*)
 
 let do_stats () =
   if get_bool "printstats" then
@@ -445,15 +447,38 @@ let diff_and_rename' file =
           if get_bool "dbg.verbose" then print_endline ("incremental mode running on commit " ^ current_commit);
           let (changes, last_analyzed_commit) =
             (match SerializeCFG.last_analyzed_commit () with
-             | Some last_analyzed_commit -> (match SerializeCFG.load_latest_cfg !cFileNames with
+             | Some last_analyzed_commit -> Format.printf "compare to %s\n" last_analyzed_commit; (match SerializeCFG.load_latest_cfg !cFileNames with
                  | Some (file2, cfgTbl2) ->
+                 (*
+                 Format.printf "hash table: \n";
+                  MyCFG.H.iter (fun n (e,n') -> let n'' = try MyCFG.H.find cfgTbl n' |> snd |> node_to_id_string with Not_found -> "none" in Format.printf "%s -> %s -> %s, " (node_to_id_string n) (node_to_id_string n') n'') cfgTbl;
+                  Format.printf "\n";
+                  *)
                    let (version_map, changes, max_ids) = update_map' file2 file cfgTbl2 cfgTbl in
                    let max_ids = UpdateCfg.update_ids file2 max_ids file version_map current_commit changes in
                    store_map' version_map max_ids;
+                  (*
+                   Format.printf "hash table after update: \n";
+                  MyCFG.H.iter (fun n (e,n') -> let n'' = try MyCFG.H.find cfgTbl n' |> snd |> node_to_id_string with Not_found -> "none" in Format.printf "%s -> %s -> %s, " (node_to_id_string n) (node_to_id_string n') n'') cfgTbl;
+                  Format.printf "\n";
+                  *)
+                  (*
+                  let test, _ = MyCFG.getCFGTbl file in
+                  Format.printf "recreated hash table after update: \n";
+                  MyCFG.H.iter (fun n (e,n') -> Format.printf "%s -> %s, " (node_to_id_string n) (node_to_id_string n')) test;
+                  Format.printf "\n";
+                  *)
+                   let print_cfg tbl filename = 
+                    let module Cfg: MyCFG.CfgForward = struct let next = MyCFG.H.find_all tbl end in
+                    let funs = List.filter_map (fun g -> match g with Cil.GFun (f,l) -> Some (MyCFG.FunctionEntry f.svar) | _ -> None) file.Cil.globals
+                    in print_min_cfg_coloring (module Cfg) funs (fun _ _ _ _ -> "black") (fun _ _ -> "black") filename in
+                  print_cfg cfgTbl2 "cfg_old.dot";
+                  print_cfg cfgTbl "cfg_new.dot";
+
                    (changes, last_analyzed_commit)
                  | None -> failwith "No cfg.data from previous analysis found!"
                )
-             | None -> (match SerializeCFG.current_commit_dir () with
+             | None -> Format.printf "no last analyzed commit to compare to\n"; (match SerializeCFG.current_commit_dir () with
                  | Some commit_dir ->
                    let (version_map, max_ids) = VersionLookupCFG.create_map file current_commit in
                    store_map' version_map max_ids;
@@ -469,8 +494,7 @@ let diff_and_rename' file =
             (* Note: Global initializers/start state changes are not considered here: *)
             CompareCFG.check_any_changed changes
           );
-          (* {Analyses.changes = changes; analyzed_commit_dir; current_commit_dir} *)
-          (changes, analyzed_commit_dir, current_commit_dir)
+          {Analyses.changes = changes; analyzed_commit_dir; current_commit_dir}
         )
       | None -> failwith "Failure! Working directory is not clean")
   in change_info
@@ -521,98 +545,6 @@ let main =
       main_running := true;
       try
         Stats.reset Stats.SoftwareTimer;
-        
-        Cilfacade.init ();
-        parse_arguments ();
-        check_arguments ();
-        handle_extraspecials ();
-        create_temp_dir ();
-        handle_flags ();
-        if get_bool "dbg.verbose" then (
-          print_endline (localtime ());
-          print_endline command;
-        );
-        let file = preprocess_files () |> merge_preprocessed in
-
-        (*
-        let getFile fname = Cilfacade.init();
-          cFileNames := [fname];
-          create_temp_dir ();
-          preprocess_files () |> merge_preprocessed in
-        let file = getFile "/home/sarah/Studium/WS_20-21/MA/figlet/figlet.c" in
-        *)
-        let (changes, analyzed_commit_dir, current_commit_dir) = diff_and_rename' file in
-        Format.printf "%s, %s\n" analyzed_commit_dir current_commit_dir;
-        
-        let print_changes changes =
-          Format.printf "added:\n";
-          List.iter (fun glob -> Format.printf "%s, " (identifier_of_global glob).name) changes.added;
-          Format.printf "\nremoved:\n";
-          List.iter (fun glob -> Format.printf "%s, " (identifier_of_global glob).name) changes.removed;
-          Format.printf "\nchanged:\n";
-          List.iter (fun glob -> Format.printf "%s -> %s, " (identifier_of_global glob.old).name (identifier_of_global glob.current).name) changes.changed;
-          Format.printf "\nunchanged:\n";
-          List.iter (fun glob -> Format.printf "%s, " (identifier_of_global glob).name) changes.unchanged;
-          Format.printf "\n"; 
-        in
-
-        let print_num_changes changes =
-          Format.printf "added: %d\n" (List.length changes.added);
-          Format.printf "removed: %d\n" (List.length changes.removed);
-          Format.printf "changed: %d\n" (List.length changes.changed);
-          Format.printf "unchanged: %d\n" (List.length changes.unchanged);
-        in
-
-        print_num_changes changes
-
-        (* let cfgTbl1, cfgTbl2 = MyCFG.getCFGTbl file1 |> fst, MyCFG.getCFGTbl file2 |> fst in
-        let printCFG file filename = 
-          let cfgF, _ = MyCFG.getCFG file in
-          let module Cfg: MyCFG.CfgForward = struct let next = cfgF end in
-          let funs = List.filter_map (fun g -> match g with | Cil.GFun (f,_) -> Some (MyCFG.FunctionEntry f.svar) | _ -> None) file.globals in
-          print_min_cfg_coloring (module Cfg : MyCFG.CfgForward) funs (fun _ _ _ _ -> "black") (fun _ _ -> "black") filename in
-        printCFG file1 "cfg_1.dot";
-        printCFG file2 "cfg_2.dot";
-        let map1 = Hashtbl.create 113 in
-        List.iter (fun g -> try Hashtbl.add map1 (CompareCFG.identifier_of_global g) (g,"1") with _ -> ()) file1.globals;
-        let maxIds1 = 
-          let vid_max = ref 0 in
-          let sid_max = ref 0 in
-          let update_vid_max vid =
-            if vid > !vid_max then vid_max := vid
-          in
-          let update_sid_max sid =
-            if sid > !sid_max then sid_max := sid
-          in
-          let update_ids (glob: Cil.global) = match glob with
-            | GFun (fn, loc) -> List.iter (fun (s : Cil.stmt) -> update_sid_max s.sid) fn.sallstmts;
-                List.iter (List.iter (fun (v : Cil.varinfo) -> update_vid_max v.vid)) [fn.slocals; fn.sformals]
-            | GVar (v,_,_) -> update_vid_max v.vid
-            | GVarDecl (v,_) -> update_vid_max v.vid
-            | _ -> ()
-          in
-          List.iter update_ids file1.globals;
-          ({max_sid = !sid_max; max_vid = !vid_max} : UpdateCfg.max_ids) in
-        let changes = CompareCFG.compareCilFiles file1 file2 cfgTbl1 cfgTbl2 in
-        printf "#changed globals: %d\n" (List.length changes.changed);
-        printf "#unchanged globals: %d\n" (List.length changes.unchanged);
-        printf "#added globals: %d\n" (List.length changes.added);
-        printf "#removed globals: %d\n" (List.length changes.removed);
-        List.iter (fun cg -> printf "%s -> %s\n" (identifier_of_global cg.old).name (identifier_of_global cg.current).name (*;
-          match cg.diff with | None -> () | Some d -> List.iter (fun n -> printf "%s, " (node_to_string n)) d.primChangedNodes *)) changes.changed; 
-        (* printf "\n"; *)
-        
-        let updateMap m = List.iter (fun (glob: Cil.global) ->  Hashtbl.replace m (identifier_of_global glob) (glob, "2")) (List.map (fun a -> a.current) changes.changed);
-          List.iter (fun (glob: Cil.global) ->  Hashtbl.replace m (identifier_of_global glob) (glob, "2")) changes.added;
-          m in
-        let map2 = updateMap map1 in
-        let maxIds2 = UpdateCfg.update_ids file1 maxIds1 file2 map2 "2" changes in
-        printf "maxIds1: %d, %d\n" maxIds1.max_sid maxIds1.max_vid;
-        printf "maxIds2: %d, %d\n" maxIds2.max_sid maxIds2.max_vid;
-        printCFG file2 "cfg_2_upd.dot"
-        *)
-
-        (*
         parse_arguments ();
         check_arguments ();
 
@@ -630,13 +562,12 @@ let main =
           print_endline command;
         );
         let file = preprocess_files () |> merge_preprocessed in
-        let changeInfo = if GobConfig.get_string "exp.incremental.mode" = "off" then Analyses.empty_increment_data () else diff_and_rename file in
+        let changeInfo = if GobConfig.get_string "exp.incremental.mode" = "off" then Analyses.empty_increment_data () else diff_and_rename' file in
         file|> do_analyze changeInfo;
         do_stats ();
         do_html_output ();
         if !verified = Some false then exit 3;  (* verifier failed! *)
         if !Messages.worldStopped then exit 124 (* timeout! *)
-        *)
       with Exit -> exit 1
     )
 

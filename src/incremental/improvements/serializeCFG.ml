@@ -3,7 +3,7 @@ open MyCFG
 
 let goblint_dirname = ".gob"
 
-let version_map_filename = "version.data"
+let version_map_filename = "versionCFG.data"
 
 let cfgFileName = "cfg.data"
 

@@ -74,9 +74,8 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
     | Statement old_s, Statement s -> s.sid <- old_s.sid; update_sid_max s.sid
     | FunctionEntry old_f, FunctionEntry f -> f.vid <- old_f.vid; update_vid_max f.vid
     | Function old_f, Function f -> f.vid <- old_f.vid; update_vid_max f.vid
-    | _ -> Format.printf "%s %s\n" (node_to_string old_n) (node_to_string n); 
-        raise (Failure "Node tuple falsely classified as unchanged nodes") in
-    List.iter (fun (old_n, n) -> Format.printf "%s <- %s\n" (node_to_string old_n) (node_to_string n); assign_same_id (old_n, n)) matches;
+    | _ -> raise (Failure "Node tuple falsely classified as unchanged nodes") in
+    List.iter (fun (old_n, n) -> assign_same_id (old_n, n)) matches;
   in
   let reset_changed_stmts (changed: node list) =
     let assign_new_id n = match n with
@@ -85,7 +84,7 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
       through the Function node in the change set to avoid incorrect re-generation *)
       | FunctionEntry f -> ()
       | Function f -> () in
-    List.iter (fun n -> Format.printf "%s new\n" (node_to_string n); assign_new_id n) changed;
+    List.iter (fun n -> assign_new_id n) changed;
   in
   let reset_changed_fun (f: fundec) (old_f: fundec) (diff: nodes_diff option) =
     match diff with
@@ -106,22 +105,6 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
       List.iter (fun f -> update_vid_max f.vid) f.sformals;
       reset_unchanged_nodes d.unchangedNodes;
       reset_changed_stmts d.changedNodes
-      (*
-      let renew_remaining_node_ids s = if not (List.exists (fun (old_n, n) -> Node.equal (Statement s) n) d.unchangedNodes) 
-        then (s.sid <- make_sid (); Format.printf "new id for node %s: %d\n" (node_to_string (Statement s)) s.sid) in
-        (* try let _,_ = List.find (fun (old_n, n) -> Node.equal (Statement s) n) d.unchangedNodes in ()
-        with Not_found -> s.sid <- make_sid () in *)
-      List.iter renew_remaining_node_ids f.sallstmts;
-      *)
-      (*
-      Format.printf "slocals: \n";
-      List.iter (fun l -> Format.printf "%s, " l.vname) f.slocals;
-      Format.printf "\n";
-      Format.printf "sformals: \n";
-      List.iter (fun f -> Format.printf "%s, " f.vname) f.sformals;
-      Format.printf "\n"
-      *)
-      (* TODO: but for all nodes, not changed: reset_changed_nodes d.primChangedNodes; *)
   in
   let reset_changed_globals (changed: changed_global) =
     match (changed.current, changed.old) with
