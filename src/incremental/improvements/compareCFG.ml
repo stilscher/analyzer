@@ -1,6 +1,5 @@
 open MyCFG
 open Queue
-open Defaults
 open Cil
 open Format
 

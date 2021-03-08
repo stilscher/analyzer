@@ -499,46 +499,7 @@ let diff_and_rename' file =
       | None -> failwith "Failure! Working directory is not clean")
   in change_info
 
-let testCFGComparison fpath1 fpath2 =
-  let getFile fname = Cilfacade.init();
-    cFileNames := [fname];
-    create_temp_dir ();
-    preprocess_files () |> merge_preprocessed in
-  let file1 = getFile fpath1
-  and file2 = getFile fpath2 in
-  let res = CompareCFG.compare_all_funs file1 file2 in
-  let handleDiff node (std, diff) = if DiffS.cardinal diff > 0 then (printf "\n%s\n" fpath1; print_diff_set diff) in
-  FunDiffMap.iter handleDiff res
-  (* assert (List.for_all (fun (std, diff) -> DiffS.cardinal diff = 0) ls) *)
-
-let testDuplicateFile fpath =
-    if Str.string_match (Str.regexp ".+\\.c$") fpath 0 then
-
-  let manualExclude = ["08-asm_nop.c"] in
-  let exclude = let chan = open_in fpath in
-    try (let firstLine = input_line chan in
-      let b = Str.string_match (Str.regexp "\\(//\\( \\)?SKIP\\)\\|\\(//\\( \\)?PARAM\\)") firstLine 0 in close_in chan; b)
-    with End_of_file -> (close_in chan; false) in
-
-  if not exclude && not (List.mem (Filename.basename fpath) manualExclude) then
-    testCFGComparison fpath fpath
-
-let testFiles = 
-  let baseDir = "tests/regression" in
-  (* these test directories only contain tests with additional parameters *)
-  let excludeDirs = [] in
-  let testDirs = let relDirs = Array.filter (fun n -> not (List.mem n excludeDirs)) (Sys.readdir baseDir) in
-    Array.map (fun name -> Filename.concat baseDir name) relDirs in
-  let toFullFileNameList dir = Array.map (fun name -> Filename.concat dir name) (Sys.readdir dir) |> Array.to_list in
-  Array.fold_right (fun dir acc -> (toFullFileNameList dir) @ acc) testDirs []
-
-let store_load_cfg file (cfg : ((Cil.location * MyCFG.edge) list * Node.node) MyCFG.H.t) =
-  SerializeCFG.save_cfg file cfg;
-  let (r : ((Cil.location * MyCFG.edge) list * Node.node) MyCFG.H.t option) = SerializeCFG.load_latest_cfg ["cfg.data"] in 
-  match r with
-  | None -> printf "no cfg loaded\n"
-  | Some c -> MyCFG.print c
-
+(** the main function *)
 let main =
   let main_running = ref false in fun () ->
     if not !main_running then (
