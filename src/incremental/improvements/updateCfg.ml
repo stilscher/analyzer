@@ -104,7 +104,7 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
       List.iter (fun l -> update_vid_max l.vid) f.slocals;
       List.iter (fun f -> update_vid_max f.vid) f.sformals;
       reset_unchanged_nodes d.unchangedNodes;
-      reset_changed_stmts d.changedNodes
+      reset_changed_stmts d.newNodes
   in
   let reset_changed_globals (changed: changed_global) =
     match (changed.current, changed.old) with

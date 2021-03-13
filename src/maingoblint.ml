@@ -6,7 +6,6 @@ open Defaults
 open Printf
 open Json
 open Goblintutil
-open CompareCFG
 
 let writeconffile = ref ""
 
@@ -447,38 +446,15 @@ let diff_and_rename' file =
           if get_bool "dbg.verbose" then print_endline ("incremental mode running on commit " ^ current_commit);
           let (changes, last_analyzed_commit) =
             (match SerializeCFG.last_analyzed_commit () with
-             | Some last_analyzed_commit -> Format.printf "compare to %s\n" last_analyzed_commit; (match SerializeCFG.load_latest_cfg !cFileNames with
+             | Some last_analyzed_commit -> (match SerializeCFG.load_latest_cfg !cFileNames with
                  | Some (file2, cfgTbl2) ->
-                 (*
-                 Format.printf "hash table: \n";
-                  MyCFG.H.iter (fun n (e,n') -> let n'' = try MyCFG.H.find cfgTbl n' |> snd |> node_to_id_string with Not_found -> "none" in Format.printf "%s -> %s -> %s, " (node_to_id_string n) (node_to_id_string n') n'') cfgTbl;
-                  Format.printf "\n";
-                  *)
                    let (version_map, changes, max_ids) = update_map' file2 file cfgTbl2 cfgTbl in
                    let max_ids = UpdateCfg.update_ids file2 max_ids file version_map current_commit changes in
                    store_map' version_map max_ids;
-                  (*
-                   Format.printf "hash table after update: \n";
-                  MyCFG.H.iter (fun n (e,n') -> let n'' = try MyCFG.H.find cfgTbl n' |> snd |> node_to_id_string with Not_found -> "none" in Format.printf "%s -> %s -> %s, " (node_to_id_string n) (node_to_id_string n') n'') cfgTbl;
-                  Format.printf "\n";
-                  *)
-                  (*
-                  let test, _ = MyCFG.getCFGTbl file in
-                  Format.printf "recreated hash table after update: \n";
-                  MyCFG.H.iter (fun n (e,n') -> Format.printf "%s -> %s, " (node_to_id_string n) (node_to_id_string n')) test;
-                  Format.printf "\n";
-                  *)
-                   let print_cfg tbl filename = 
-                    let module Cfg: MyCFG.CfgForward = struct let next = MyCFG.H.find_all tbl end in
-                    let funs = List.filter_map (fun g -> match g with Cil.GFun (f,l) -> Some (MyCFG.FunctionEntry f.svar) | _ -> None) file.Cil.globals
-                    in print_min_cfg_coloring (module Cfg) funs (fun _ _ _ _ -> "black") (fun _ _ -> "black") filename in
-                  print_cfg cfgTbl2 "cfg_old.dot";
-                  print_cfg cfgTbl "cfg_new.dot";
-
                    (changes, last_analyzed_commit)
                  | None -> failwith "No cfg.data from previous analysis found!"
                )
-             | None -> Format.printf "no last analyzed commit to compare to\n"; (match SerializeCFG.current_commit_dir () with
+             | None -> (match SerializeCFG.current_commit_dir () with
                  | Some commit_dir ->
                    let (version_map, max_ids) = VersionLookupCFG.create_map file current_commit in
                    store_map' version_map max_ids;

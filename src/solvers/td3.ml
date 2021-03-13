@@ -222,8 +222,8 @@ module WP =
           List.fold_left (fun acc el -> match f el with Some x -> x::acc | _ -> acc) [] l
         in
         let obsolete_funs = filter_map (fun c -> match c.old, c.diff with GFun (f,l), None -> Some f | _ -> None) S.increment.changes.changed in
-        let prim_obsolete_nodes = List.flatten (filter_map (fun c -> match c.diff with Some nodes -> Some nodes.primChangedNodes | _ -> None) S.increment.changes.changed) in
-        let obsolete_nodes = List.flatten (filter_map (fun c -> match c.diff with Some nodes -> Some nodes.changedNodes | _ -> None) S.increment.changes.changed) in
+        let prim_obsolete_nodes = List.flatten (filter_map (fun c -> match c.diff with Some nodes -> Some nodes.primOldNodes | _ -> None) S.increment.changes.changed) in
+        let obsolete_nodes = List.flatten (filter_map (fun c -> match c.diff with Some nodes -> Some nodes.oldNodes | _ -> None) S.increment.changes.changed) in
         let removed_funs = filter_map (fun g -> match g with GFun (f,l) -> Some f | _ -> None) S.increment.changes.removed in
         let obsolete = Set.union (Set.union (Set.of_list (List.map (fun a -> "ret" ^ (string_of_int a.Cil.svar.vid))  obsolete_funs))
                                     (Set.of_list (List.map (fun a -> "fun" ^ (string_of_int a.Cil.svar.vid))  obsolete_funs)))
