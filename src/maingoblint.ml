@@ -426,9 +426,9 @@ let do_stats () =
     Stats.print (Messages.get_out "timing" Legacy.stderr) "Timings:\n";
     flush_all ()
 
-let update_map' old_file new_file oldCfgTbl newCfgTbl =
+let update_map' old_file new_file =
   let dir = SerializeCFG.gob_directory () in
-  VersionLookupCFG.restore_map dir old_file new_file oldCfgTbl newCfgTbl
+  VersionLookupCFG.restore_map dir old_file new_file
 
 let store_map' updated_map max_ids = (* Creates the directory for the commit *)
   match SerializeCFG.current_commit_dir () with
@@ -442,13 +442,12 @@ let diff_and_rename' file =
 
   let change_info = (match SerializeCFG.current_commit () with
       | Some current_commit -> ((* "put the preparation for incremental analysis here!" *)
-          let cfgTbl = MyCFG.getCFGTbl file |> fst in
           if get_bool "dbg.verbose" then print_endline ("incremental mode running on commit " ^ current_commit);
           let (changes, last_analyzed_commit) =
             (match SerializeCFG.last_analyzed_commit () with
              | Some last_analyzed_commit -> (match SerializeCFG.load_latest_cfg !cFileNames with
-                 | Some (file2, cfgTbl2) ->
-                   let (version_map, changes, max_ids) = update_map' file2 file cfgTbl2 cfgTbl in
+                 | Some file2 ->
+                   let (version_map, changes, max_ids) = update_map' file2 file in
                    let max_ids = UpdateCfg.update_ids file2 max_ids file version_map current_commit changes in
                    store_map' version_map max_ids;
                    (changes, last_analyzed_commit)
@@ -461,7 +460,7 @@ let diff_and_rename' file =
                    (CompareCFG.empty_change_info (), "")
                  | None -> failwith "Directory for storing the results of the current run could not be created!")
             ) in
-          SerializeCFG.save_cfg file cfgTbl;
+          SerializeCFG.save_cfg file;
           let analyzed_commit_dir = Filename.concat (data_path ()) last_analyzed_commit in
           let current_commit_dir = Filename.concat (data_path ()) current_commit in
           Cilfacade.print_to_file (Filename.concat current_commit_dir "cil.c") file;

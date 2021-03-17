@@ -1,7 +1,7 @@
+open GobConfig
 open MyCFG
 open Queue
 open Cil
-open Format
 
 type nodes_diff = {
   unchangedNodes: (node * node) list;
@@ -290,8 +290,8 @@ module NodeNodeSet = Set.Make (
 )
 
 let print_queue q = 
-    let f (n1, n2) = printf "(%s,%s)\n" (Pretty.sprint 200 (pretty_node () n1)) (Pretty.sprint 200 (pretty_node () n2)) in 
-  printf "queue: "; if Queue.is_empty q then printf "empty\n" else Queue.iter f q
+    let f (n1, n2) = Format.printf "(%s,%s)\n" (Pretty.sprint 200 (pretty_node () n1)) (Pretty.sprint 200 (pretty_node () n2)) in 
+  Format.printf "queue: "; if Queue.is_empty q then Format.printf "empty\n" else Queue.iter f q
 
 let node_to_string n = Pretty.sprint 200 (pretty_node () n)
 let edge_to_string e = Pretty.sprint 200 (pretty_edge () e)
@@ -304,13 +304,13 @@ let node_to_id_string n =
 
 let print_std_set s = 
   let print_elem ((fromNode1, fromNode2), (edgeList1, edgeList2), (toNode1, toNode2)) = 
-    printf "(%s, %s)\n" (node_to_string fromNode2) (node_to_string toNode2) in 
-  printf "std set: "; if StdS.is_empty s then printf "empty\n" else StdS.iter print_elem s
+    Format.printf "(%s, %s)\n" (node_to_string fromNode2) (node_to_string toNode2) in 
+  Format.printf "std set: "; if StdS.is_empty s then Format.printf "empty\n" else StdS.iter print_elem s
 
 let print_diff_set s =
   let print_elem ((fromNode1, fromNode2), edgeList2, toNode2) = 
-    printf "((%s, %s), %s)\n" (node_to_string fromNode1) (node_to_string fromNode2) (node_to_string toNode2) in 
-  printf "diff set: "; if DiffS.is_empty s then printf "empty\n" else DiffS.iter print_elem s
+    Format.printf "((%s, %s), %s)\n" (node_to_string fromNode1) (node_to_string fromNode2) (node_to_string toNode2) in 
+  Format.printf "diff set: "; if DiffS.is_empty s then Format.printf "empty\n" else DiffS.iter print_elem s
 
 (* in contrast to the original eq_varinfo in CompareAST, this method also ignores vinline and vaddrof *)
 let eq_varinfo' (a: varinfo) (b: varinfo) = a.vname = b.vname && eq_typ a.vtype b.vtype && eq_list eq_attribute a.vattr b.vattr &&
@@ -614,7 +614,8 @@ let compare_all_funs file1 file2 =
 *)
 
 (* Returns a list of changed functions *)
-let compareCilFiles (oldAST: file) (newAST: file) oldCfgTbl newCfgTbl =
+let compareCilFiles (oldAST: file) (newAST: file) =
+  if get_bool "dbg.verbose" then print_endline ("comparing cil files based on cfg...");
   let oldCfg, _ = MyCFG.getCFG oldAST in
   let newCfg, _ = MyCFG.getCFG newAST in
   let module OldCfg: MyCFG.CfgForward = struct let next = oldCfg end in
@@ -656,4 +657,5 @@ let compareCilFiles (oldAST: file) (newAST: file) oldCfgTbl newCfgTbl =
   (* We check whether functions have been added or removed *)
   Cil.iterGlobals newAST (fun glob -> try if not (checkExists oldMap glob) then changes.added <- (glob::changes.added) with e -> ());
   Cil.iterGlobals oldAST (fun glob -> try if not (checkExists newMap glob) then changes.removed <- (glob::changes.removed) with e -> ());
+  if get_bool "dbg.verbose" then print_endline ("comparison completed");
   changes

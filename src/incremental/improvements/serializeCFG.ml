@@ -1,5 +1,4 @@
 open Prelude
-open MyCFG
 
 let goblint_dirname = ".gob"
 
@@ -77,10 +76,10 @@ let load_latest_cfg (src_files: string list) =
     Some (unmarshal cfg)
   with e -> None
 
-let save_cfg (file : Cil.file) (cfg : ((Cil.location * edge) list * node) MyCFG.H.t) = match current_commit_dir () with
+let save_cfg (file : Cil.file) = match current_commit_dir () with
   | Some dir ->
     let cfgFile = Filename.concat dir cfgFileName in
-    marshal (file, cfg) cfgFile
+    marshal file cfgFile
   | None -> print_endline "Failed saving cfg: working directory is dirty"
 
   let load_heap_vars () =
