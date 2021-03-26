@@ -77,14 +77,8 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
     | _ -> raise (Failure "Node tuple falsely classified as unchanged nodes") in
     List.iter (fun (old_n, n) -> assign_same_id (old_n, n)) matches;
   in
-  let reset_changed_stmts (changed: node list) =
-    let assign_new_id n = match n with
-      | Statement s -> s.sid <- make_sid ()
-      (* function id is explicitly assigned in reset_changed_fun. Other than that there should be no other id generation
-      through the Function node in the change set to avoid incorrect re-generation *)
-      | FunctionEntry f -> ()
-      | Function f -> () in
-    List.iter (fun n -> assign_new_id n) changed;
+  let reset_changed_stmt (unchangedNodes: node list) s = 
+    if not (List.exists (fun n -> Node.equal n (Statement s)) unchangedNodes) then s.sid <- make_sid ()
   in
   let reset_changed_fun (f: fundec) (old_f: fundec) (diff: nodes_diff option) =
     match diff with
@@ -104,7 +98,7 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
       List.iter (fun l -> update_vid_max l.vid) f.slocals;
       List.iter (fun f -> update_vid_max f.vid) f.sformals;
       reset_unchanged_nodes d.unchangedNodes;
-      reset_changed_stmts d.newNodes
+      List.iter (reset_changed_stmt (List.map snd d.unchangedNodes)) f.sallstmts
   in
   let reset_changed_globals (changed: changed_global) =
     match (changed.current, changed.old) with
