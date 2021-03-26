@@ -164,6 +164,15 @@ let createCFG (file: file) =
   let cfgB = H.create 113 in
   if Messages.tracing then Messages.trace "cfg" "Starting to build the cfg.\n\n";
 
+  let sid_max = ref 0 in
+  let update_sids (glob: global) = 
+    match glob with
+    | GFun (fn, loc) -> (match fn.smaxstmtid with 
+      | Some sid -> if sid > !sid_max then sid_max := sid
+      | None -> raise (Failure ("smaxstmtid not defined for function " ^ fn.svar.vname)))
+    | _ -> () in
+  Cil.iterGlobals file update_sids;  
+
   (* Utility function to add stmt edges to the cfg *)
   let addCfg' t xs f =
     if Messages.tracing then
@@ -217,9 +226,9 @@ let createCFG (file: file) =
          * lazy, so it's only added when actually needed *)
         let pseudo_return = lazy (
           let newst = mkStmt (Return (None, loc)) in
-          let start_id = 10_000_000_000 in (* TODO get max_sid? *)
-          let sid = fd.svar.vid in (* Need pure sid instead of Cil.new_sid for incremental, similar to vid in Goblintutil.create_var. We only add one return stmt per loop, so the location hash should be unique. *)
-          newst.sid <- sid + start_id;
+          let start_id = !sid_max in (* TODO get max_sid? *)
+          let sid = Hashtbl.hash loc in (* Need pure sid instead of Cil.new_sid for incremental, similar to vid in Goblintutil.create_var. We only add one return stmt per loop, so the location hash should be unique. *)
+          newst.sid <- if sid < start_id then sid + start_id else sid;
           Hashtbl.add stmt_index_hack newst.sid fd;
           let newst_node = Statement newst in
           addCfg (Function fd.svar) (Ret (None,fd), newst_node);
