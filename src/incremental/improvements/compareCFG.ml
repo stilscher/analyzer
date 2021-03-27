@@ -403,8 +403,8 @@ let print_min_cfg_coloring (module Cfg : CfgForward) funs edgeColoring nodeColor
     let rec dfs fromNode (vis, acc) =
       if List.mem fromNode vis then (vis, acc) 
       else
-        let nodeLabel = node_to_id_string fromNode ^ ": " ^ node_to_string fromNode in
-        let edgeLabel edgeList = List.fold_right (fun (loc, e) a -> edge_to_string e ^ a) edgeList "" in 
+        let nodeLabel = String.map (fun c -> if c='(' || c=')' || c='"' || c='\'' || c='*' then '.' else c) (node_to_id_string fromNode ^ ": " ^ node_to_string fromNode) in
+        let edgeLabel edgeList = String.map (fun c -> if c='(' || c=')' || c='"' || c='\'' || c='*' then '.' else c) (List.fold_right (fun (loc, e) a -> edge_to_string e ^ a) edgeList "") in 
         let print_edge edgeList toNode = node_to_id_string fromNode ^ " -> " ^ node_to_id_string toNode
           ^ " [ label = \"" ^ edgeLabel edgeList ^ "\", color = \"" ^ edgeColoring entryNode fromNode (to_edge_list edgeList) toNode ^ "\" ];\n"
           ^ node_to_id_string fromNode ^ " [ label=\"" ^ nodeLabel ^ "\", color = \"" ^ nodeColoring entryNode fromNode ^ "\" ];\n" in

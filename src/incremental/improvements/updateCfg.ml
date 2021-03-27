@@ -97,8 +97,11 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
       List.iter (fun (lo, o_f) -> lo.vid <- o_f.vid) (List.combine f.sformals old_f.sformals);
       List.iter (fun l -> update_vid_max l.vid) f.slocals;
       List.iter (fun f -> update_vid_max f.vid) f.sformals;
-      reset_unchanged_nodes d.unchangedNodes;
-      List.iter (reset_changed_stmt (List.map snd d.unchangedNodes)) f.sallstmts
+      (* Keeping this order when updating ids is very important since Node.equal in reset_unchanged_nodes tests only 
+      for id equality. Otherwise some new nodes might not receive a new id and lead to duplicate ids in the 
+      respective function *)
+      List.iter (fun s -> reset_changed_stmt (List.map snd d.unchangedNodes) s) f.sallstmts;
+      reset_unchanged_nodes d.unchangedNodes
   in
   let reset_changed_globals (changed: changed_global) =
     match (changed.current, changed.old) with
