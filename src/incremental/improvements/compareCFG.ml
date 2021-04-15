@@ -521,8 +521,10 @@ let reexamine f1 f2 stdSet diffSet (module Cfg1 : CfgForward) (module Cfg2 : Cfg
       let classify n (vis, addedNodes) =
         if NodeSet.mem n vis then (vis, addedNodes)
         else let ext_vis = NodeSet.add n vis in 
-        if NodeNodeSet.exists (fun (n1,n2) -> Node.equal n2 n) sameNodes then dfs2 n (ext_vis, addedNodes)
-        else dfs2 n (ext_vis, NodeSet.add n addedNodes) in
+        match n with
+        | Function d -> (ext_vis, addedNodes)
+        | _ -> if NodeNodeSet.exists (fun (n1,n2) -> Node.equal n2 n) sameNodes then dfs2 n (ext_vis, addedNodes)
+            else dfs2 n (ext_vis, NodeSet.add n addedNodes) in
       let succ = List.map snd (Cfg2.next node) in
       List.fold_right classify succ (vis, addedNodes) in
     dfs2 (FunctionEntry f2.svar) (NodeSet.empty, NodeSet.empty) in
@@ -614,10 +616,10 @@ let compare_all_funs file1 file2 =
 *)
 
 (* Returns a list of changed functions *)
-let compareCilFiles (oldAST: file) (newAST: file) =
+let compareCilFiles' (oldAST: file) (newAST: file) pseudo_returns =
   if get_bool "dbg.verbose" then print_endline ("comparing cil files based on cfg...");
   let oldCfg, _ = MyCFG.getCFG oldAST in
-  let newCfg, _ = MyCFG.getCFG newAST in
+  let newCfg, _ = MyCFG.getCFG' newAST pseudo_returns in
   let module OldCfg: MyCFG.CfgForward = struct let next = oldCfg end in
   let module NewCfg: MyCFG.CfgForward = struct let next = newCfg end in
 
@@ -659,3 +661,6 @@ let compareCilFiles (oldAST: file) (newAST: file) =
   Cil.iterGlobals oldAST (fun glob -> try if not (checkExists newMap glob) then changes.removed <- (glob::changes.removed) with e -> ());
   if get_bool "dbg.verbose" then print_endline ("comparison completed");
   changes
+
+let compareCilFiles (oldAST: file) (newAST: file) =
+  compareCilFiles' oldAST newAST None

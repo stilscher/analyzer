@@ -159,7 +159,7 @@ let find_backwards_reachable (module Cfg:CfgBackward) (node:node): unit NH.t =
   iter_node node;
   reachable
 
-let createCFG (file: file) =
+let createCFG' (file: file) pseudo_returns =
   let cfgF = H.create 113 in
   let cfgB = H.create 113 in
   if Messages.tracing then Messages.trace "cfg" "Starting to build the cfg.\n\n";
@@ -167,11 +167,11 @@ let createCFG (file: file) =
   let sid_max = ref 0 in
   let update_sids (glob: global) = 
     match glob with
-    | GFun (fn, loc) -> (match fn.smaxstmtid with 
-      | Some sid -> if sid > !sid_max then sid_max := sid
-      | None -> raise (Failure ("smaxstmtid not defined for function " ^ fn.svar.vname)))
+    | GFun (fn, loc) -> List.iter (fun s -> if s.sid > !sid_max then sid_max := s.sid) fn.sallstmts
     | _ -> () in
-  Cil.iterGlobals file update_sids;  
+  Cil.iterGlobals file update_sids;
+  (match pseudo_returns with | None -> () | Some ht -> Hashtbl.iter (fun f i -> if i > !sid_max then sid_max := i) ht);
+  Cil.iterGlobals file (fun g -> match g with GFun (f,_) -> List.iter (fun s -> assert (s.sid <= !sid_max)) f.sallstmts | _ -> ());
 
   (* Utility function to add stmt edges to the cfg *)
   let addCfg' t xs f =
@@ -226,9 +226,17 @@ let createCFG (file: file) =
          * lazy, so it's only added when actually needed *)
         let pseudo_return = lazy (
           let newst = mkStmt (Return (None, loc)) in
-          let start_id = !sid_max in (* TODO get max_sid? *)
-          let sid = Hashtbl.hash loc in (* Need pure sid instead of Cil.new_sid for incremental, similar to vid in Goblintutil.create_var. We only add one return stmt per loop, so the location hash should be unique. *)
-          newst.sid <- if sid < start_id then sid + start_id else sid;
+          (* Hash map pseudo_returns is None if function is not changed, that is added or unchanged. It is Some if the 
+          function was partially changed. In that case the id saved during cfg update needs to be used. Otherwise 
+          sid_max + fd.svar.vid is unique and has correct relationsship with the saved results *)
+          (match pseudo_returns with
+              None -> let start_id = !sid_max in (* TODO get max_sid? *)
+                let sid = Hashtbl.hash loc in (* Need pure sid instead of Cil.new_sid for incremental, similar to vid in Goblintutil.create_var. We only add one return stmt per loop, so the location hash should be unique. *)
+                newst.sid <- fd.svar.vid + start_id;
+            | Some ht -> try newst.sid <- Hashtbl.find ht fd with e -> ( 
+                let start_id = !sid_max in (* TODO get max_sid? *)
+                let sid = Hashtbl.hash loc in (* Need pure sid instead of Cil.new_sid for incremental, similar to vid in Goblintutil.create_var. We only add one return stmt per loop, so the location hash should be unique. *)
+                newst.sid <- fd.svar.vid + start_id));
           Hashtbl.add stmt_index_hack newst.sid fd;
           let newst_node = Statement newst in
           addCfg (Function fd.svar) (Ret (None,fd), newst_node);
@@ -323,6 +331,9 @@ let createCFG (file: file) =
     );
   if Messages.tracing then Messages.trace "cfg" "CFG building finished.\n\n";
   cfgF, cfgB
+
+let createCFG (file: file) =
+  createCFG' file None
 
 let print cfg  =
   let out = open_out "cfg.dot" in
@@ -471,8 +482,8 @@ let minimizeCFG (fw,bw) =
   H.clear keep;
   cfgF, cfgB
 
-let getCFG (file: file) : cfg * cfg =
-  let cfgF, cfgB = createCFG file in
+let getCFG' (file: file) pseudo_returns : cfg * cfg =
+  let cfgF, cfgB = createCFG' file pseudo_returns in
   let cfgF, cfgB =
     if get_bool "exp.mincfg" then
       Stats.time "minimizing the cfg" minimizeCFG (cfgF, cfgB)
@@ -481,6 +492,9 @@ let getCFG (file: file) : cfg * cfg =
   in
   if get_bool "justcfg" then print cfgB;
   H.find_all cfgF, H.find_all cfgB
+
+let getCFG (file: file) : cfg * cfg =
+  getCFG' file None
 
 let getCFGTbl (file: file) =
   let cfgF, cfgB = createCFG file in
