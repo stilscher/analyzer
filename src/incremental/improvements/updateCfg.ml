@@ -95,37 +95,25 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
       List.iter (fun (lo, o_f) -> lo.vid <- o_f.vid) (List.combine f.sformals old_f.sformals);
       List.iter (fun l -> update_vid_max l.vid) f.slocals;
       List.iter (fun f -> update_vid_max f.vid) f.sformals;
+
       (* Keeping this order when updating ids is very important since Node.equal in reset_unchanged_nodes tests only 
       for id equality. Otherwise some new nodes might not receive a new id and lead to duplicate ids in the 
       respective function *)
-
       List.iter (reset_changed_stmt (List.map snd d.unchangedNodes)) f.sallstmts;
       List.iter assign_same_id d.unchangedNodes;
 
       (* pseudo return nodes are not created until the MyCFG generation. Therefor their ids need to be updated after. 
       To implement this, pseudo return nodes (Statements that are in d.newNodes or d.unchangedNodes but not in f.sallstmts) will be 
       collected here. *)
-
-      Cil.iterGlobals new_file (fun g -> match g with GFun (f,_) -> List.iter (fun s -> assert (s.sid <= !sid_max)) f.sallstmts | _ -> ());
-
       let cache_new_pseudo_return_id n = match n with 
         | Statement s -> 
-            if not (List.mem s f.sallstmts) then 
-              (if f.svar.vname = "Zopen" then print_endline ("cache pseudo return " ^ (string_of_int s.sid)); 
-              assert (let b = not (Hashtbl.mem pseudo_returns f) in if not b then print_endline ((string_of_int s.sid) ^ " " ^ string_of_int (Hashtbl.find pseudo_returns f) ^ " " ^ f.svar.vname); b); 
-              s.sid <- make_sid (); if s.sid = 4810 then print_endline "\nASSIGN 4810!\n";
-              Hashtbl.add pseudo_returns f s.sid)
+            if not (List.mem s f.sallstmts) then (s.sid <- make_sid (); Hashtbl.add pseudo_returns f s.sid)
         | _ -> () in
       List.iter cache_new_pseudo_return_id d.newNodes;
 
-      List.iter (fun n -> assert (not (List.exists (fun n' -> Node.equal n n') d.newNodes))) (List.map snd d.unchangedNodes);
-      List.iter (fun n -> assert (List.length (List.filter (fun n' -> Node.equal n n') (List.map snd d.unchangedNodes)) <= 1)) (List.map snd d.unchangedNodes);
-
       let cache_pseudo_return_id n = match n with 
         | Statement s -> 
-            if not (List.mem s f.sallstmts) then 
-              (assert (let b = not (Hashtbl.mem pseudo_returns f) in if not b then print_endline (string_of_int s.sid ^ " " ^ string_of_int (Hashtbl.find pseudo_returns f) ^ " " ^ f.svar.vname); b);
-              Hashtbl.add pseudo_returns f s.sid)
+            if not (List.mem s f.sallstmts) then Hashtbl.add pseudo_returns f s.sid
         | _ -> () in
       List.iter cache_pseudo_return_id (List.map snd d.unchangedNodes)
       
@@ -177,14 +165,9 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
   List.iter reset_changed_globals changes.changed;
   List.iter update_globals changes.added;
 
-  let dup f = List.fold_right (fun s b -> if List.length (List.find_all (fun s' -> s.sid = s'.sid) f.sallstmts) > 1 then true else b) f.sallstmts false in
-  Cil.iterGlobals new_file (fun g -> match g with | GFun (f,l) -> assert (not (dup f)) | _ -> ());
-
   (* Update the sid_max and vid_max *)
   Cil.iterGlobals new_file update_ids;
-  print_endline "pseudo return ids:";
-  Hashtbl.iter (fun f i -> print_endline (f.svar.vname ^ ": " ^ (string_of_int i)); update_sid_max i) pseudo_returns;
-
+ 
   (* increment the sid so that the *unreachable* nodes that are introduced afterwards get unique sids *)
   while !sid_max > Cil.new_sid () do
     ()

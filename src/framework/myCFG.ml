@@ -171,7 +171,6 @@ let createCFG' (file: file) pseudo_returns =
     | _ -> () in
   Cil.iterGlobals file update_sids;
   (match pseudo_returns with | None -> () | Some ht -> Hashtbl.iter (fun f i -> if i > !sid_max then sid_max := i) ht);
-  Cil.iterGlobals file (fun g -> match g with GFun (f,_) -> List.iter (fun s -> assert (s.sid <= !sid_max)) f.sallstmts | _ -> ());
 
   (* Utility function to add stmt edges to the cfg *)
   let addCfg' t xs f =
@@ -230,13 +229,8 @@ let createCFG' (file: file) pseudo_returns =
           function was partially changed. In that case the id saved during cfg update needs to be used. Otherwise 
           sid_max + fd.svar.vid is unique and has correct relationsship with the saved results *)
           (match pseudo_returns with
-              None -> let start_id = !sid_max in (* TODO get max_sid? *)
-                let sid = Hashtbl.hash loc in (* Need pure sid instead of Cil.new_sid for incremental, similar to vid in Goblintutil.create_var. We only add one return stmt per loop, so the location hash should be unique. *)
-                newst.sid <- fd.svar.vid + start_id;
-            | Some ht -> try newst.sid <- Hashtbl.find ht fd with e -> ( 
-                let start_id = !sid_max in (* TODO get max_sid? *)
-                let sid = Hashtbl.hash loc in (* Need pure sid instead of Cil.new_sid for incremental, similar to vid in Goblintutil.create_var. We only add one return stmt per loop, so the location hash should be unique. *)
-                newst.sid <- fd.svar.vid + start_id));
+              None -> newst.sid <- fd.svar.vid + !sid_max
+            | Some ht -> try newst.sid <- Hashtbl.find ht fd with e -> (newst.sid <- fd.svar.vid + !sid_max));
           Hashtbl.add stmt_index_hack newst.sid fd;
           let newst_node = Statement newst in
           addCfg (Function fd.svar) (Ret (None,fd), newst_node);
