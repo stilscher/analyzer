@@ -530,11 +530,10 @@ let reexamine f1 f2 stdSet diffSet (module Cfg1 : CfgForward) (module Cfg2 : Cfg
     dfs2 (FunctionEntry f2.svar) (NodeSet.empty, NodeSet.empty) in
   let (sameNodes, primRemovedNodes, removedNodes) =
     let rec dfs1 node (sameNodes, primRemovedNodes, removedNodes) =
-      let classify k (same, primRemoved, removed) = match k with
-        | Function d -> (same, primRemoved, removed) (* leave out regular back-edge from return statement to function node  *)
-        | _ -> if NodeSet.mem k primRemoved || NodeSet.mem k removed then (same, primRemoved, removed)
-          else if NodeNodeSet.exists (fun (n1,_) -> Node.equal n1 k) same then (NodeNodeSet.filter (fun (n1,_) -> not (Node.equal n1 k)) same, NodeSet.add k primRemoved, NodeSet.add k removed)
-          else dfs1 k (same, primRemoved, NodeSet.add k removed) in
+      let classify k (same, primRemoved, removed) = 
+        if NodeSet.mem k primRemoved || NodeSet.mem k removed then (same, primRemoved, removed)
+        else if NodeNodeSet.exists (fun (n1,_) -> Node.equal n1 k) same then (NodeNodeSet.filter (fun (n1,_) -> not (Node.equal n1 k)) same, NodeSet.add k primRemoved, NodeSet.add k removed)
+        else dfs1 k (same, primRemoved, NodeSet.add k removed) in
       let succ = List.map snd (Cfg1.next node) in
       List.fold_right classify succ (sameNodes, primRemovedNodes, removedNodes) in
     NodeSet.fold dfs1 diffNodes1 (sameNodes, diffNodes1, diffNodes1) in
@@ -543,20 +542,6 @@ let reexamine f1 f2 stdSet diffSet (module Cfg1 : CfgForward) (module Cfg2 : Cfg
 let compareFun (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 =
   let stdSet, diffSet = compareCfgs (module Cfg1) (module Cfg2) fun1 fun2 in
   let unchanged, primRemoved, removed, added = reexamine fun1 fun2 stdSet diffSet (module Cfg1) (module Cfg2) in
-  (*
-  printf "unchanged: ";
-  List.iter (fun (n1,n2) -> printf "(%s,%s), " (node_to_string n1) (node_to_string n2)) unchanged;
-  printf "\n";
-    printf "primRemoved: ";
-  List.iter (fun n -> printf "%s, " (node_to_string n)) primRemoved;
-  printf "\n";
-  printf "removed: ";
-  List.iter (fun n -> printf "%s, " (node_to_string n)) removed;
-  printf "\n";
-  printf "added: ";
-  List.iter (fun n -> printf "%s, " (node_to_string n)) added;
-  printf "\n";
-  *)
   unchanged, primRemoved, removed, added
 
 let eqF' (a: Cil.fundec) (module Cfg1 : MyCFG.CfgForward) (b: Cil.fundec) (module Cfg2 : MyCFG.CfgForward) =
@@ -564,9 +549,9 @@ let eqF' (a: Cil.fundec) (module Cfg1 : MyCFG.CfgForward) (b: Cil.fundec) (modul
     let eq_header = eq_varinfo a.svar b.svar &&
     List.for_all (fun (x, y) -> eq_varinfo x y) (List.combine a.sformals b.sformals) &&
     List.for_all (fun (x, y) -> eq_varinfo x y) (List.combine a.slocals b.slocals) in
-    (* eq_block (a.sbody, a) (b.sbody, b) *)
+    if not eq_header then (false, None) else
     let matches, primRemoved, removed, added = compareFun (module Cfg1) (module Cfg2) a b in
-    if not eq_header then (false, None) else if List.length added = 0 && List.length removed = 0 then (true, None) else (false, Some {unchangedNodes = matches; primOldNodes = primRemoved; oldNodes = removed; newNodes = added})
+    if List.length added = 0 && List.length removed = 0 then (true, None) else (false, Some {unchangedNodes = matches; primOldNodes = primRemoved; oldNodes = removed; newNodes = added})
   with Invalid_argument _ -> (* One of the combines failed because the lists have differend length *)
     false, None
 

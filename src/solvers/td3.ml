@@ -227,7 +227,7 @@ module WP =
         let removed_funs = filter_map (fun g -> match g with GFun (f,l) -> Some f | _ -> None) S.increment.changes.removed in
         let obsolete = Set.union (Set.union (Set.of_list (List.map (fun a -> "ret" ^ (string_of_int a.Cil.svar.vid))  obsolete_funs))
                                     (Set.of_list (List.map (fun a -> "fun" ^ (string_of_int a.Cil.svar.vid))  obsolete_funs)))
-                                 (Set.of_list (List.filter_map (fun a -> match a with MyCFG.Statement s -> Some (string_of_int s.sid) | _ -> None) prim_obsolete_nodes)) in
+                                 (Set.of_list (List.filter_map (fun a -> match a with MyCFG.Statement s -> Some (string_of_int s.sid) | MyCFG.Function f -> Some ("ret" ^ (string_of_int f.Cil.vid)) | _ -> None) prim_obsolete_nodes)) in
 
         List.iter (fun a -> print_endline ("Obsolete function: " ^ a.svar.vname)) obsolete_funs;
         List.iter (fun a -> print_endline ("Obsolete node: " ^ (node_to_string a))) obsolete_nodes;
@@ -246,7 +246,9 @@ module WP =
         let marked_for_deletion = Hashtbl.create 103 in
         add_nodes_of_fun obsolete_funs marked_for_deletion;
         add_nodes_of_fun removed_funs marked_for_deletion;
-        List.iter (fun n -> match n with MyCFG.Statement s -> Hashtbl.replace marked_for_deletion (string_of_int s.sid) () | _ -> ()) obsolete_nodes; 
+        List.iter (fun n -> match n with MyCFG.Statement s -> Hashtbl.replace marked_for_deletion (string_of_int s.sid) () 
+          | MyCFG.Function f -> Hashtbl.replace marked_for_deletion (string_of_int f.vid) () 
+          | _ -> ()) obsolete_nodes; 
 
         print_endline "Removing data for changed and removed functions...";
         let delete_marked s = HM.iter (fun k v -> if Hashtbl.mem  marked_for_deletion (S.Var.var_id k) then HM.remove s k ) s in
