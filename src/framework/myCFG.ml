@@ -159,11 +159,12 @@ let find_backwards_reachable (module Cfg:CfgBackward) (node:node): unit NH.t =
   iter_node node;
   reachable
 
-let createCFG' (file: file) pseudo_returns =
+let createCFG (file: file) =
   let cfgF = H.create 113 in
   let cfgB = H.create 113 in
   if Messages.tracing then Messages.trace "cfg" "Starting to build the cfg.\n\n";
 
+(*
   let sid_max = ref 0 in
   let update_sids (glob: global) = 
     match glob with
@@ -171,6 +172,7 @@ let createCFG' (file: file) pseudo_returns =
     | _ -> () in
   Cil.iterGlobals file update_sids;
   (match pseudo_returns with | None -> () | Some ht -> Hashtbl.iter (fun f i -> if i > !sid_max then sid_max := i) ht);
+*)
 
   (* Utility function to add stmt edges to the cfg *)
   let addCfg' t xs f =
@@ -225,12 +227,7 @@ let createCFG' (file: file) pseudo_returns =
          * lazy, so it's only added when actually needed *)
         let pseudo_return = lazy (
           let newst = mkStmt (Return (None, loc)) in
-          (* Hash map pseudo_returns is None if function is not changed, that is added or unchanged. It is Some if the 
-          function was partially changed. In that case the id saved during cfg update needs to be used. Otherwise 
-          sid_max + fd.svar.vid is unique and has correct relationsship with the saved results *)
-          (match pseudo_returns with
-              None -> newst.sid <- fd.svar.vid + !sid_max
-            | Some ht -> try newst.sid <- Hashtbl.find ht fd with e -> (newst.sid <- fd.svar.vid + !sid_max));
+          newst.sid <- fd.svar.vid + 100000000;
           Hashtbl.add stmt_index_hack newst.sid fd;
           let newst_node = Statement newst in
           addCfg (Function fd.svar) (Ret (None,fd), newst_node);
@@ -326,9 +323,10 @@ let createCFG' (file: file) pseudo_returns =
   if Messages.tracing then Messages.trace "cfg" "CFG building finished.\n\n";
   cfgF, cfgB
 
+(*
 let createCFG (file: file) =
   createCFG' file None
-
+*)
 let print cfg  =
   let out = open_out "cfg.dot" in
   let module NH = Hashtbl.Make (Node) in
@@ -476,8 +474,8 @@ let minimizeCFG (fw,bw) =
   H.clear keep;
   cfgF, cfgB
 
-let getCFG' (file: file) pseudo_returns : cfg * cfg =
-  let cfgF, cfgB = createCFG' file pseudo_returns in
+let getCFG (file: file) : cfg * cfg =
+  let cfgF, cfgB = createCFG file in
   let cfgF, cfgB =
     if get_bool "exp.mincfg" then
       Stats.time "minimizing the cfg" minimizeCFG (cfgF, cfgB)
@@ -486,9 +484,6 @@ let getCFG' (file: file) pseudo_returns : cfg * cfg =
   in
   if get_bool "justcfg" then print cfgB;
   H.find_all cfgF, H.find_all cfgB
-
-let getCFG (file: file) : cfg * cfg =
-  getCFG' file None
 
 let getCFGTbl (file: file) =
   let cfgF, cfgB = createCFG file in

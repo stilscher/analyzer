@@ -284,7 +284,7 @@ let merge_preprocessed cpp_file_names =
   merged_AST
 
 (** Perform the analysis over the merged AST.  *)
-let do_analyze change_info merged_AST pseudo_returns =
+let do_analyze change_info merged_AST =
   let module L = Printable.Liszt (Basetype.CilFundec) in
   if get_bool "justcil" then
     (* if we only want to print the output created by CIL: *)
@@ -308,7 +308,7 @@ let do_analyze change_info merged_AST pseudo_returns =
           print_endline @@ "Activated analyses for phase " ^ string_of_int p ^ ": " ^ aa;
           print_endline @@ "Activated transformations for phase " ^ string_of_int p ^ ": " ^ at
         );
-        try Control.analyze change_info ast funs pseudo_returns
+        try Control.analyze change_info ast funs
         with x ->
           let loc = !Tracing.current_loc in
           Printf.printf "About to crash on %s:%d\n" loc.Cil.file loc.Cil.line;
@@ -379,46 +379,6 @@ let store_map updated_map max_ids = (* Creates the directory for the commit *)
     Serialize.marshal (updated_map, max_ids) map_file_name
   | None -> ()
 
-(* Detects changes and renames vids and sids. *)
-(*
-let diff_and_rename file =
-  Serialize.src_direcotry := src_path ();
-
-  let change_info = (match Serialize.current_commit () with
-      | Some current_commit -> ((* "put the preparation for incremental analysis here!" *)
-          if get_bool "dbg.verbose" then print_endline ("incremental mode running on commit " ^ current_commit);
-          let (changes, last_analyzed_commit) =
-            (match Serialize.last_analyzed_commit () with
-             | Some last_analyzed_commit -> (match Serialize.load_latest_cil !cFileNames with
-                 | Some file2 ->
-                   let (version_map, changes, max_ids) = update_map file2 file in
-                   let max_ids = UpdateCil.update_ids file2 max_ids file version_map current_commit changes in
-                   store_map version_map max_ids;
-                   (changes, last_analyzed_commit)
-                 | None -> failwith "No ast.data from previous analysis found!"
-               )
-             | None -> (match Serialize.current_commit_dir () with
-                 | Some commit_dir ->
-                   let (version_map, max_ids) = VersionLookup.create_map file current_commit in
-                   store_map version_map max_ids;
-                   (CompareAST.empty_change_info (), "")
-                 | None -> failwith "Directory for storing the results of the current run could not be created!")
-            ) in
-          Serialize.save_cil file;
-          let analyzed_commit_dir = Filename.concat (data_path ()) last_analyzed_commit in
-          let current_commit_dir = Filename.concat (data_path ()) current_commit in
-          Cilfacade.print_to_file (Filename.concat current_commit_dir "cil.c") file;
-          if "" <> last_analyzed_commit then (
-            CompareAST.check_file_changed analyzed_commit_dir current_commit_dir;
-            (* Note: Global initializers/start state changes are not considered here: *)
-            CompareAST.check_any_changed changes
-          );
-          {Analyses.changes = changes; analyzed_commit_dir; current_commit_dir}
-        )
-      | None -> failwith "Failure! Working directory is not clean")
-  in change_info
-*)
-
 let do_stats () =
   if get_bool "printstats" then
     ignore (Pretty.printf "vars = %d    evals = %d  \n" !Goblintutil.vars !Goblintutil.evals);
@@ -443,16 +403,16 @@ let diff_and_rename' file =
   let change_info = (match SerializeCFG.current_commit () with
       | Some current_commit -> ((* "put the preparation for incremental analysis here!" *)
           if get_bool "dbg.verbose" then print_endline ("incremental mode running on commit " ^ current_commit);
-          let (changes, last_analyzed_commit, pseudo_returns) =
+          let (changes, last_analyzed_commit) =
             (match SerializeCFG.last_analyzed_commit () with
              | Some last_analyzed_commit -> (match SerializeCFG.load_latest_cfg !cFileNames with
                  | Some file2 ->
                    let (version_map, changes, max_ids) = update_map' file2 file in
                    (* List.iter (fun g -> print_endline ("changed global: " ^ (CompareCFG.identifier_of_global g.CompareCFG.current).name);
                     (match (CompareCFG.identifier_of_global g.CompareCFG.current).global_t with Fun -> print_endline "Fun" | Var -> print_endline "Var" | Decl -> print_endline "Decl" | _ -> print_endline "Other");
-                    match g.CompareCFG.diff with None -> print_endline "no diff" | Some d -> print_endline "primary old nodes"; List.iter (fun n -> print_endline (CompareCFG.node_to_string n)) d.oldNodes) changes.changed;
-                   let file_copy = Obj.obj (Obj.dup (Obj.repr file)) in *)
-                   let max_ids, pseudo_returns = UpdateCfg.update_ids file2 max_ids file version_map current_commit changes in
+                    (* match g.CompareCFG.diff with None -> print_endline "no diff" | Some d -> print_endline "primary old nodes"; List.iter (fun n -> print_endline (CompareCFG.node_to_string n)) d.oldNodes *)) changes.changed;
+                   (* let file_copy = Obj.obj (Obj.dup (Obj.repr file)) in *)
+                   let max_ids = UpdateCfg.update_ids file2 max_ids file version_map current_commit changes in
                    (* let new_changes = CompareCFG.compareCilFiles' file_copy file None in
                    let cond1 = List.length new_changes.changed = 0 in
                    let cond2 = List.length new_changes.removed = 0 in
@@ -467,14 +427,14 @@ let diff_and_rename' file =
                    assert (if not cond2 then print_endline "removed set must be empty"; cond2);
                    assert (if not cond3 then print_endline "added set must be empty"; cond3); *)
                    store_map' version_map max_ids;
-                   (changes, last_analyzed_commit, None)
+                   (changes, last_analyzed_commit)
                  | None -> failwith "No cfg.data from previous analysis found!"
                )
              | None -> (match SerializeCFG.current_commit_dir () with
                  | Some commit_dir ->
                    let (version_map, max_ids) = VersionLookupCFG.create_map file current_commit in
                    store_map' version_map max_ids;
-                   (CompareCFG.empty_change_info (), "", None)
+                   (CompareCFG.empty_change_info (), "")
                  | None -> failwith "Directory for storing the results of the current run could not be created!")
             ) in
           SerializeCFG.save_cfg file;
@@ -486,7 +446,7 @@ let diff_and_rename' file =
             (* Note: Global initializers/start state changes are not considered here: *)
             CompareCFG.check_any_changed changes
           );
-          ({Analyses.changes = changes; analyzed_commit_dir; current_commit_dir}, pseudo_returns)
+          {Analyses.changes = changes; analyzed_commit_dir; current_commit_dir}
         )
       | None -> failwith "Failure! Working directory is not clean")
   in change_info
@@ -515,9 +475,9 @@ let main =
           print_endline command;
         );
         let file = preprocess_files () |> merge_preprocessed in
-        let changeInfo, pseudo_returns = if GobConfig.get_string "exp.incremental.mode" = "off" then Analyses.empty_increment_data (), None
+        let changeInfo = if GobConfig.get_string "exp.incremental.mode" = "off" then Analyses.empty_increment_data ()
           else diff_and_rename' file in
-        do_analyze changeInfo file pseudo_returns;
+        do_analyze changeInfo file;
         do_stats ();
         do_html_output ();
         if !verified = Some false then exit 3;  (* verifier failed! *)

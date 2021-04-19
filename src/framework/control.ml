@@ -543,9 +543,9 @@ struct
 end
 
 (** The main function to perform the selected analyses. *)
-let analyze change_info (file: file) fs updated_pseudo_returns =
+let analyze change_info (file: file) fs =
   if (get_bool "dbg.verbose") then print_endline "Generating the control flow graph.";
-  let cfgF, cfgB = MyCFG.getCFG' file updated_pseudo_returns in
+  let cfgF, cfgB = MyCFG.getCFG file in
   let cfgB' = function
     | MyCFG.Statement s as n -> ([get_stmtLoc s.skind,MyCFG.SelfLoop], n) :: cfgB n
     | n -> cfgB n

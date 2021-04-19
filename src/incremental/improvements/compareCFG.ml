@@ -7,7 +7,6 @@ type nodes_diff = {
   unchangedNodes: (node * node) list;
   primOldNodes: node list;
   oldNodes: node list;
-  newNodes: node list;
 }
 
 type changed_global = {
@@ -506,18 +505,6 @@ let reexamine f1 f2 same diff (module Cfg1 : CfgForward) (module Cfg2 : CfgForwa
   let sameNodes = let fromStdSet = Hashtbl.fold (fun (n1, n2) _ acc -> NodeNodeSet.add (n1,n2) acc) same NodeNodeSet.empty in
     let notInDiff = NodeNodeSet.filter (fun (n1,n2) -> not (NodeSet.mem n1 diffNodes1)) fromStdSet in
     NodeNodeSet.add (FunctionEntry f1.svar, FunctionEntry f2.svar) notInDiff in
-  let _, addedNodes =
-    let rec dfs2 node (vis, addedNodes) =
-      let classify n (vis, addedNodes) =
-        if NodeSet.mem n vis then (vis, addedNodes)
-        else let ext_vis = NodeSet.add n vis in 
-        match n with
-        | Function d -> (ext_vis, addedNodes)
-        | _ -> if NodeNodeSet.exists (fun (n1,n2) -> Node.equal n2 n) sameNodes then dfs2 n (ext_vis, addedNodes)
-            else dfs2 n (ext_vis, NodeSet.add n addedNodes) in
-      let succ = List.map snd (Cfg2.next node) in
-      List.fold_right classify succ (vis, addedNodes) in
-    dfs2 (FunctionEntry f2.svar) (NodeSet.empty, NodeSet.empty) in
   let (sameNodes, primRemovedNodes, removedNodes) =
     let rec dfs1 node (sameNodes, primRemovedNodes, removedNodes) =
       let classify k (same, primRemoved, removed) = 
@@ -527,21 +514,21 @@ let reexamine f1 f2 same diff (module Cfg1 : CfgForward) (module Cfg2 : CfgForwa
       let succ = List.map snd (Cfg1.next node) in
       List.fold_right classify succ (sameNodes, primRemovedNodes, removedNodes) in
     NodeSet.fold dfs1 diffNodes1 (sameNodes, diffNodes1, diffNodes1) in
-  (NodeNodeSet.elements sameNodes, NodeSet.elements primRemovedNodes, NodeSet.elements removedNodes, NodeSet.elements addedNodes)   
+  (NodeNodeSet.elements sameNodes, NodeSet.elements primRemovedNodes, NodeSet.elements removedNodes)   
 
 let compareFun (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 =
-  let stdSet, diffSet = compareCfgs (module Cfg1) (module Cfg2) fun1 fun2 in
-  let unchanged, primRemoved, removed, added = reexamine fun1 fun2 stdSet diffSet (module Cfg1) (module Cfg2) in
-  unchanged, primRemoved, removed, added
+  let same, diff = compareCfgs (module Cfg1) (module Cfg2) fun1 fun2 in
+  let unchanged, primRemoved, removed = reexamine fun1 fun2 same diff (module Cfg1) (module Cfg2) in
+  unchanged, primRemoved, removed
 
 let eqF' (a: Cil.fundec) (module Cfg1 : MyCFG.CfgForward) (b: Cil.fundec) (module Cfg2 : MyCFG.CfgForward) =
   try
     let eq_header = eq_varinfo a.svar b.svar &&
-    List.for_all (fun (x, y) -> eq_varinfo x y) (List.combine a.sformals b.sformals) &&
-    List.for_all (fun (x, y) -> eq_varinfo x y) (List.combine a.slocals b.slocals) in
+      List.for_all (fun (x, y) -> eq_varinfo x y) (List.combine a.sformals b.sformals) &&
+      List.for_all (fun (x, y) -> eq_varinfo x y) (List.combine a.slocals b.slocals) in
     if not eq_header then (false, None) else
-    let matches, primRemoved, removed, added = compareFun (module Cfg1) (module Cfg2) a b in
-    if List.length added = 0 && List.length removed = 0 then (true, None) else (false, Some {unchangedNodes = matches; primOldNodes = primRemoved; oldNodes = removed; newNodes = added})
+      let matches, primRemoved, removed = compareFun (module Cfg1) (module Cfg2) a b in
+      if List.length removed = 0 then (true, None) else (false, Some {unchangedNodes = matches; primOldNodes = primRemoved; oldNodes = removed})
   with Invalid_argument _ -> (* One of the combines failed because the lists have differend length *)
     false, None
 
@@ -591,10 +578,10 @@ let compare_all_funs file1 file2 =
 *)
 
 (* Returns a list of changed functions *)
-let compareCilFiles' (oldAST: file) (newAST: file) pseudo_returns =
+let compareCilFiles (oldAST: file) (newAST: file) =
   if get_bool "dbg.verbose" then print_endline ("comparing cil files based on cfg...");
   let oldCfg, _ = MyCFG.getCFG oldAST in
-  let newCfg, _ = MyCFG.getCFG' newAST pseudo_returns in
+  let newCfg, _ = MyCFG.getCFG newAST in
   let module OldCfg: MyCFG.CfgForward = struct let next = oldCfg end in
   let module NewCfg: MyCFG.CfgForward = struct let next = newCfg end in
 
@@ -636,6 +623,3 @@ let compareCilFiles' (oldAST: file) (newAST: file) pseudo_returns =
   Cil.iterGlobals oldAST (fun glob -> try if not (checkExists newMap glob) then changes.removed <- (glob::changes.removed) with e -> ());
   if get_bool "dbg.verbose" then print_endline ("comparison completed");
   changes
-
-let compareCilFiles (oldAST: file) (newAST: file) =
-  compareCilFiles' oldAST newAST None

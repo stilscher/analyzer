@@ -69,15 +69,14 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
       | _ -> ()
     with Failure m -> ()
   in
-  let assign_same_id (old_n, n) = match old_n, n with
-  | Statement old_s, Statement s -> s.sid <- old_s.sid; update_sid_max s.sid
+  let assign_same_id fallstmts (old_n, n) = match old_n, n with
+  | Statement old_s, Statement s -> if List.exists (fun s' -> Node.equal n (Statement s')) fallstmts then (s.sid <- old_s.sid; update_sid_max s.sid)
   | FunctionEntry old_f, FunctionEntry f -> f.vid <- old_f.vid; update_vid_max f.vid
   | Function old_f, Function f -> f.vid <- old_f.vid; update_vid_max f.vid
   | _ -> raise (Failure "Node tuple falsely classified as unchanged nodes") in
   let reset_changed_stmt (unchangedNodes: node list) s = 
     if not (List.exists (fun n -> Node.equal n (Statement s)) unchangedNodes) then s.sid <- make_sid ()
   in
-  let pseudo_returns = Hashtbl.create 103 in
   let reset_changed_fun (f: fundec) (old_f: fundec) (diff: nodes_diff option) =
     match diff with
     | None -> (* None is returned if the function header changed and the cfg was not compared.
@@ -100,11 +99,12 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
       for id equality. Otherwise some new nodes might not receive a new id and lead to duplicate ids in the 
       respective function *)
       List.iter (reset_changed_stmt (List.map snd d.unchangedNodes)) f.sallstmts;
-      List.iter assign_same_id d.unchangedNodes;
+      List.iter (assign_same_id f.sallstmts) d.unchangedNodes;
 
       (* pseudo return nodes are not created until the MyCFG generation. Therefor their ids need to be updated after. 
       To implement this, pseudo return nodes (Statements that are in d.newNodes or d.unchangedNodes but not in f.sallstmts) will be 
       collected here. *)
+      (*
       let cache_new_pseudo_return_id n = match n with 
         | Statement s -> 
             if not (List.mem s f.sallstmts) then (s.sid <- make_sid (); Hashtbl.add pseudo_returns f s.sid)
@@ -116,7 +116,7 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
             if not (List.mem s f.sallstmts) then Hashtbl.add pseudo_returns f s.sid
         | _ -> () in
       List.iter cache_pseudo_return_id (List.map snd d.unchangedNodes)
-      
+      *)      
   in
   let reset_changed_globals (changed: changed_global) =
     match (changed.current, changed.old) with
@@ -157,10 +157,11 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
   let update_ids (glob: global) =
     update_vids glob; update_sids glob;
   in
+(*
   (* Update the sid_max based on the ids in the new file to avoid duplications that could otherwise occur because not 
   all node ids in a function are updated *)
   Cil.iterGlobals new_file update_sids;
-
+*)
   List.iter reset_globals changes.unchanged;
   List.iter reset_changed_globals changes.changed;
   List.iter update_globals changes.added;
@@ -172,4 +173,4 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
   while !sid_max > Cil.new_sid () do
     ()
   done;
-  ({max_sid = !sid_max; max_vid = !vid_max}, pseudo_returns)
+  {max_sid = !sid_max; max_vid = !vid_max}

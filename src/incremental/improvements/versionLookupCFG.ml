@@ -19,20 +19,18 @@ let updateMap (oldFile: Cil.file) (newFile: Cil.file) (newCommitID: commitID) (h
 let create_map (new_file: Cil.file) (commit: commitID) =
   let max_sid = ref 0 in
   let max_vid = ref 0 in
-  let max_fun_vid = ref 0 in
   let update_sid sid = if sid > !max_sid then max_sid := sid in
   let update_vid vid = if vid > !max_vid then max_vid := vid in
-  let update_max_fun_id vid = if vid > !max_fun_vid then max_fun_vid := vid in
   let add_to_hashtbl tbl (global: Cil.global) =
     match global with
-    | GFun (fund, loc) as f -> update_vid fund.svar.vid; update_max_fun_id fund.svar.vid; update_sid fund.smaxid; Hashtbl.replace tbl (identifier_of_global f) (f, commit)
+    | GFun (fund, loc) as f -> update_vid fund.svar.vid; update_sid fund.smaxid; Hashtbl.replace tbl (identifier_of_global f) (f, commit)
     | GVar (var, _, _) as v -> update_vid var.vid; Hashtbl.replace tbl (identifier_of_global v) (v, commit)
     | GVarDecl (var, _) as v -> update_vid var.vid; Hashtbl.replace tbl (identifier_of_global v) (v, commit)
     | other -> ()
   in
   let tbl : (global_identifier, Cil.global * commitID) Hashtbl.t = Hashtbl.create 1000 in
   Cil.iterGlobals new_file (add_to_hashtbl tbl);
-  tbl, {max_sid = !max_sid + !max_fun_vid; max_vid =  !max_vid}
+  tbl, {max_sid = !max_sid; max_vid = !max_vid}
 
 (* Load and update the version map *)
 let load_and_update_map (folder: string) (old_commit: commitID) (new_commit: commitID) (oldFile: Cil.file) (newFile: Cil.file) =
