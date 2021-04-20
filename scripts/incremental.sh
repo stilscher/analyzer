@@ -93,6 +93,13 @@ while
   (date && ./goblint -v --conf conf/incremental.json $repo_path/Makefile 2>&1) | tee $outc/analyzer.log
   end=$(echo "scale=3; $(date +%s%3N) /1000" | bc)
   runtime=$(echo "$end-$start" | bc)
+  rt_update_map=$(grep 'Execution time update_map:' $outc/analyzer.log | cut -d" " -f4)
+  rt_compare=$(grep 'Execution time compare:' $outc/analyzer.log | cut -d" " -f4)
+  rt_compare_fun=$(grep 'Execution time compareFun:' $outc/analyzer.log | cut -d" " -f4)
+  rt_reexamine=$(grep 'Execution time reexamine:' $outc/analyzer.log | cut -d" " -f4)
+  rt_update_ids=$(grep 'Execution time update_ids:' $outc/analyzer.log | cut -d" " -f4)
+  rt_cleanup_td3=$(grep 'Execution time td3-cleanup:' $outc/analyzer.log | cut -d" " -f4)
+  rt_create_cfg=$(grep 'Execution time createCFG:' $outc/analyzer.log | cut -d" " -f4)
   log "  Goblint ran $runtime seconds"
   vars=$(grep 'vars = ' $outc/analyzer.log | cut -d" " -f3)
   evals=$(grep 'evals = ' $outc/analyzer.log | cut -d" " -f9)

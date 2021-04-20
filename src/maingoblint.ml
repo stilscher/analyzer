@@ -407,25 +407,26 @@ let diff_and_rename' file =
             (match SerializeCFG.last_analyzed_commit () with
              | Some last_analyzed_commit -> (match SerializeCFG.load_latest_cfg !cFileNames with
                  | Some file2 ->
-                   let (version_map, changes, max_ids) = update_map' file2 file in
-                   (* List.iter (fun g -> print_endline ("changed global: " ^ (CompareCFG.identifier_of_global g.CompareCFG.current).name);
-                    (match (CompareCFG.identifier_of_global g.CompareCFG.current).global_t with Fun -> print_endline "Fun" | Var -> print_endline "Var" | Decl -> print_endline "Decl" | _ -> print_endline "Other");
+                   let (version_map, changes, max_ids) = Goblintutil.time (update_map' file2) file "update_map" in
+                   List.iter (fun g -> print_endline ("changed global: " ^ (CompareCFG.identifier_of_global g.CompareCFG.current).name)
+                    (* (match (CompareCFG.identifier_of_global g.CompareCFG.current).global_t with Fun -> print_endline "Fun" | Var -> print_endline "Var" | Decl -> print_endline "Decl" | _ -> print_endline "Other"); *)
                     (* match g.CompareCFG.diff with None -> print_endline "no diff" | Some d -> print_endline "primary old nodes"; List.iter (fun n -> print_endline (CompareCFG.node_to_string n)) d.oldNodes *)) changes.changed;
-                   (* let file_copy = Obj.obj (Obj.dup (Obj.repr file)) in *)
-                   let max_ids = UpdateCfg.update_ids file2 max_ids file version_map current_commit changes in
-                   (* let new_changes = CompareCFG.compareCilFiles' file_copy file None in
+                   (* List.iter (fun g -> print_endline ("unchanged global: " ^ (CompareCFG.identifier_of_global g).name)) changes.unchanged;
+                   List.iter (fun g -> print_endline ("removed global: " ^ (CompareCFG.identifier_of_global g).name)) changes.removed;
+                   List.iter (fun g -> print_endline ("added global: " ^ (CompareCFG.identifier_of_global g).name)) changes.added;
+                   let file_copy = Obj.obj (Obj.dup (Obj.repr file)) in *)
+                   let max_ids = Goblintutil.time (UpdateCfg.update_ids file2 max_ids file version_map current_commit) changes "update_ids" in
+                   (* let new_changes = CompareCFG.compareCilFiles file_copy file in
                    let cond1 = List.length new_changes.changed = 0 in
                    let cond2 = List.length new_changes.removed = 0 in
-                   let cond3 = List.length new_changes.added = 0 in
-                   if cond1 && cond2 && cond3 then print_endline "\nOK!\n";
+                   if cond1 && cond2 then print_endline "\nOK!\n";
                    assert (if not cond1 then print_endline "changed set must be empty";
                    List.iter (fun cg -> match cg.CompareCFG.current with 
                       Cil.GFun (f,l) -> print_endline f.svar.vname; (match cg.CompareCFG.diff with 
                           None -> print_endline "no diff" 
-                        | Some d -> Printf.printf "some diff: %d %d %d %d\n" (List.length d.unchangedNodes) (List.length d.primOldNodes) (List.length d.oldNodes) (List.length d.newNodes))
+                        | Some d -> Printf.printf "some diff: %d %d %d\n" (List.length d.unchangedNodes) (List.length d.primOldNodes) (List.length d.oldNodes))
                     | _ -> print_endline "changed global") new_changes.changed; cond1);
-                   assert (if not cond2 then print_endline "removed set must be empty"; cond2);
-                   assert (if not cond3 then print_endline "added set must be empty"; cond3); *)
+                   assert (if not cond2 then print_endline "removed set must be empty"; cond2); *)
                    store_map' version_map max_ids;
                    (changes, last_analyzed_commit)
                  | None -> failwith "No cfg.data from previous analysis found!"

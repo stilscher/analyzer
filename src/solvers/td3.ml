@@ -43,6 +43,12 @@ module WP =
         Printf.printf "%s:\n|rho|=%d\n|stable|=%d\n|infl|=%d\n|wpoint|=%d\n"
           str (HM.length data.rho) (HM.length data.stable) (HM.length data.infl) (HM.length data.wpoint)
 
+    let print_data_ext data str =
+      if GobConfig.get_bool "dbg.verbose" then
+        Printf.printf "%s:\n|rho|=%d\n|stable|=%d\n|infl|=%d\n|wpoint|=%d\n"
+          str (HM.length data.rho) (HM.length data.stable) (HM.length data.infl) (HM.length data.wpoint);
+        HM.iter (fun v d -> ignore @@ Pretty.printf "%s\n" (node_to_string (S.Var.node v))) data.rho
+
     let exists_key f hm = HM.fold (fun k _ a -> a || f k) hm false
 
     module P =
@@ -217,6 +223,7 @@ module WP =
 
         print_endline "Destabilizing changed functions...";
 
+        let f () = 
         (* We need to destabilize all nodes in changed functions *)
         let filter_map f l =
           List.fold_left (fun acc el -> match f el with Some x -> x::acc | _ -> acc) [] l
@@ -229,9 +236,11 @@ module WP =
                                     (Set.of_list (List.map (fun a -> "fun" ^ (string_of_int a.Cil.svar.vid))  obsolete_funs)))
                                  (Set.of_list (List.filter_map (fun a -> match a with MyCFG.Statement s -> Some (string_of_int s.sid) | MyCFG.Function f -> Some ("ret" ^ (string_of_int f.Cil.vid)) | _ -> None) prim_obsolete_nodes)) in
 
-        List.iter (fun a -> print_endline ("Obsolete function: " ^ a.svar.vname)) obsolete_funs;
-        List.iter (fun a -> print_endline ("Obsolete node: " ^ (node_to_string a))) obsolete_nodes;
-
+        (*
+        if GobConfig.get_bool "dbg.verbose" then
+          (List.iter (fun a -> print_endline ("Obsolete function: " ^ a.svar.vname)) obsolete_funs;
+          List.iter (fun a -> print_endline ("Obsolete node: " ^ (node_to_string a))) obsolete_nodes);
+        *)
         (* Actually destabilize all nodes contained in changed functions. TODO only destabilize fun_... nodes *)
         HM.iter (fun k v -> if Set.mem (S.Var.var_id k) obsolete then destabilize k) stable;
 
@@ -251,11 +260,13 @@ module WP =
           | _ -> ()) obsolete_nodes; 
 
         print_endline "Removing data for changed and removed functions...";
-        let delete_marked s = HM.iter (fun k v -> if Hashtbl.mem  marked_for_deletion (S.Var.var_id k) then HM.remove s k ) s in
+        let delete_marked s = HM.iter (fun k v -> if Hashtbl.mem marked_for_deletion (S.Var.var_id k) then (if not (HM.mem s k) then raise (Failure (S.Var.var_id k ^ " not in HM -> removing nothing")); HM.remove s k; if HM.mem s k then raise (Failure ("removed key " ^ S.Var.var_id k ^ " still in hashtbl")))) s in
         delete_marked rho;
         delete_marked infl;
         delete_marked wpoint;
-        delete_marked stable;
+        delete_marked stable in
+
+        Goblintutil.time f () "td3-cleanup";
 
         print_data data "Data after clean-up"
       );

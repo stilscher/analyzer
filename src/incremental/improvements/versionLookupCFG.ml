@@ -10,7 +10,7 @@ type max_ids = {
 }
 
 let updateMap (oldFile: Cil.file) (newFile: Cil.file) (newCommitID: commitID) (ht: (global_identifier, Cil.global * commitID) Hashtbl.t) =
-  let changes = compareCilFiles oldFile newFile in
+  let changes = Goblintutil.time (compareCilFiles oldFile) newFile "compare" in
   (* TODO: For updateCIL, we have to show whether the new data is from an changed or added functiong  *)
   List.iter (fun (glob: global) ->  Hashtbl.replace ht (identifier_of_global glob) (glob, newCommitID)) (List.map (fun a -> a.current) changes.changed);
   List.iter (fun (glob: global) ->  Hashtbl.replace ht (identifier_of_global glob) (glob, newCommitID)) changes.added;
