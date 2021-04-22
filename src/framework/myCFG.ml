@@ -227,7 +227,7 @@ let createCFG (file: file) =
          * lazy, so it's only added when actually needed *)
         let pseudo_return = lazy (
           let newst = mkStmt (Return (None, loc)) in
-          newst.sid <- fd.svar.vid + 100000000;
+          newst.sid <- fd.svar.vid + 10_000_000_000;
           Hashtbl.add stmt_index_hack newst.sid fd;
           let newst_node = Statement newst in
           addCfg (Function fd.svar) (Ret (None,fd), newst_node);

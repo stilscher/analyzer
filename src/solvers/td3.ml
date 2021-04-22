@@ -256,11 +256,11 @@ module WP =
         add_nodes_of_fun obsolete_funs marked_for_deletion;
         add_nodes_of_fun removed_funs marked_for_deletion;
         List.iter (fun n -> match n with MyCFG.Statement s -> Hashtbl.replace marked_for_deletion (string_of_int s.sid) () 
-          | MyCFG.Function f -> Hashtbl.replace marked_for_deletion (string_of_int f.vid) () 
+          | MyCFG.Function f -> Hashtbl.replace marked_for_deletion ("ret"^string_of_int f.vid) () 
           | _ -> ()) obsolete_nodes; 
 
         print_endline "Removing data for changed and removed functions...";
-        let delete_marked s = HM.iter (fun k v -> if Hashtbl.mem marked_for_deletion (S.Var.var_id k) then (if not (HM.mem s k) then raise (Failure (S.Var.var_id k ^ " not in HM -> removing nothing")); HM.remove s k; if HM.mem s k then raise (Failure ("removed key " ^ S.Var.var_id k ^ " still in hashtbl")))) s in
+        let delete_marked s = HM.iter (fun k v -> if Hashtbl.mem marked_for_deletion (S.Var.var_id k) then HM.remove s k) s in
         delete_marked rho;
         delete_marked infl;
         delete_marked wpoint;

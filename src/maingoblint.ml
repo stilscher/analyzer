@@ -408,13 +408,14 @@ let diff_and_rename' file =
              | Some last_analyzed_commit -> (match SerializeCFG.load_latest_cfg !cFileNames with
                  | Some file2 ->
                    let (version_map, changes, max_ids) = Goblintutil.time (update_map' file2) file "update_map" in
+                   (* List.(Printf.printf "change_info = { unchanged = %d; changed = %d; added = %d; removed = %d }\n" (length changes.unchanged) (length changes.changed) (length changes.added) (length changes.removed));
                    List.iter (fun g -> print_endline ("changed global: " ^ (CompareCFG.identifier_of_global g.CompareCFG.current).name)
                     (* (match (CompareCFG.identifier_of_global g.CompareCFG.current).global_t with Fun -> print_endline "Fun" | Var -> print_endline "Var" | Decl -> print_endline "Decl" | _ -> print_endline "Other"); *)
                     (* match g.CompareCFG.diff with None -> print_endline "no diff" | Some d -> print_endline "primary old nodes"; List.iter (fun n -> print_endline (CompareCFG.node_to_string n)) d.oldNodes *)) changes.changed;
-                   (* List.iter (fun g -> print_endline ("unchanged global: " ^ (CompareCFG.identifier_of_global g).name)) changes.unchanged;
+                   List.iter (fun g -> print_endline ("unchanged global: " ^ (CompareCFG.identifier_of_global g).name)) changes.unchanged;
                    List.iter (fun g -> print_endline ("removed global: " ^ (CompareCFG.identifier_of_global g).name)) changes.removed;
-                   List.iter (fun g -> print_endline ("added global: " ^ (CompareCFG.identifier_of_global g).name)) changes.added;
-                   let file_copy = Obj.obj (Obj.dup (Obj.repr file)) in *)
+                   List.iter (fun g -> print_endline ("added global: " ^ (CompareCFG.identifier_of_global g).name)) changes.added; *)
+                   (* let file_copy = Obj.obj (Obj.dup (Obj.repr file)) in *)
                    let max_ids = Goblintutil.time (UpdateCfg.update_ids file2 max_ids file version_map current_commit) changes "update_ids" in
                    (* let new_changes = CompareCFG.compareCilFiles file_copy file in
                    let cond1 = List.length new_changes.changed = 0 in
