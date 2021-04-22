@@ -462,40 +462,33 @@ let compareCfgs (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 
       let (fromNode1, fromNode2) = Queue.take waitingList in
       let outList1 = Cfg1.next fromNode1 in
       let outList2 = Cfg2.next fromNode2 in
-              
-      let findEquiv (edgeList1, toNode1) ls2 = 
-        let rec aux ls2 =
-          match ls2 with
-          | [] -> Hashtbl.add diff toNode1 ()
-          | (locEdgeList2, toNode2) :: ls2' ->
-            let edgeList2 = to_edge_list locEdgeList2 in
-            if eq_node (toNode1, fun1) (toNode2, fun2) && eq_edge_list edgeList1 edgeList2 then
-              ((let notIn = Hashtbl.fold (fun (toNode1', toNode2') v acc 
-                  -> acc && not (Node.equal toNode1 toNode1' && Node.equal toNode2 toNode2')) same true in
-                if notIn then Queue.add (toNode1, toNode2) waitingList);
-                Hashtbl.add same (toNode1, toNode2) ())
-            else aux ls2' in
-        aux ls2 in
-      
-      let rec iterOuts ls1 = 
-        match ls1 with
-        | [] -> ()
-        | (locEdgeList1, toNode1) :: ls1' ->
-            let edgeList1 = to_edge_list locEdgeList1 in
-            (* Differentiate between a possibly duplicate Test(1,false) edge and a single occurence. In the first
-            case the edge is directly added to the diff set to avoid undetected ambiguities during the recursive 
-            call. *)
-            let testFalseEdge edge = match edge with
-              | Test (p,b) -> p = Cil.one && b = false
-              | _ -> false in
-            let posAmbigEdge edgeList = let findTestFalseEdge (ll,_) = testFalseEdge (snd (List.hd ll)) in
-              let numDuplicates l = List.length (List.find_all findTestFalseEdge l) in
-              testFalseEdge (List.hd edgeList) && (numDuplicates outList1 > 1 || numDuplicates outList2 > 1) in
-            if posAmbigEdge edgeList1 
-              then Hashtbl.add diff toNode1 ()
-              else findEquiv (edgeList1, toNode1) outList2;
-          iterOuts ls1' in
-    iterOuts outList1; compareNext () in
+
+      let findEquiv (edgeList1, toNode1) =
+        let aux (locEdgeList2, toNode2) b = if b then b else
+          let edgeList2 = to_edge_list locEdgeList2 in
+          if eq_node (toNode1, fun1) (toNode2, fun2) && eq_edge_list edgeList1 edgeList2 then
+            (let notIn = Hashtbl.fold (fun (toNode1', toNode2') v acc -> acc && not (Node.equal toNode1 toNode1' && Node.equal toNode2 toNode2')) same true in
+              if notIn then Queue.add (toNode1, toNode2) waitingList;
+              Hashtbl.add same (toNode1, toNode2) (); true)
+          else false in
+        let found = List.fold_right aux outList2 false in
+        if not found then Hashtbl.add diff toNode1 () in
+       
+      let iterOuts (locEdgeList1, toNode1) = 
+        let edgeList1 = to_edge_list locEdgeList1 in
+        (* Differentiate between a possibly duplicate Test(1,false) edge and a single occurence. In the first
+        case the edge is directly added to the diff set to avoid undetected ambiguities during the recursive 
+        call. *)
+        let testFalseEdge edge = match edge with
+          | Test (p,b) -> p = Cil.one && b = false
+          | _ -> false in
+        let posAmbigEdge edgeList = let findTestFalseEdge (ll,_) = testFalseEdge (snd (List.hd ll)) in
+          let numDuplicates l = List.length (List.find_all findTestFalseEdge l) in
+          testFalseEdge (List.hd edgeList) && (numDuplicates outList1 > 1 || numDuplicates outList2 > 1) in
+        if posAmbigEdge edgeList1 
+          then Hashtbl.add diff toNode1 ()
+          else findEquiv (edgeList1, toNode1) in
+    List.iter iterOuts outList1; compareNext () in
     
   let entryNode1, entryNode2 = (FunctionEntry fun1.svar, FunctionEntry fun2.svar) in
   Queue.push (entryNode1,entryNode2) waitingList; compareNext (); (same, diff)
