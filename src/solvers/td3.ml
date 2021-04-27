@@ -56,7 +56,7 @@ module WP =
 
     type phase = Widen | Narrow
 
-    let solve box st vs data =
+    let solve box st vs data node_map =
       let term  = GobConfig.get_bool "exp.solver.td3.term" in
       let side_widen = GobConfig.get_string "exp.solver.td3.side_widen" in
       let space = GobConfig.get_bool "exp.solver.td3.space" in
@@ -83,6 +83,22 @@ module WP =
         VS.iter (fun y ->
           HM.remove stable y;
           destabilize y) w
+      and destabilize_fun old_node_map f x =
+        let inFun node =
+          match node with
+          | MyCFG.Statement stmt -> let fd = Hashtbl.find old_node_map stmt.sid in fd.svar.vid = f.svar.vid
+          | MyCFG.Function fv -> fv.vid = f.svar.vid
+          | MyCFG.FunctionEntry fv -> fv.vid = f.svar.vid in
+        let rec destabilize x =
+        ignore @@ Pretty.printf ("destabilize in function %s\n") f.svar.vname;
+        if tracing then trace "sol2" "destabilize %a\n" S.Var.pretty_trace x;
+        let w = HM.find_default infl x VS.empty in
+        HM.replace infl x VS.empty;
+        VS.iter (fun y -> let n = S.Var.node y in
+          (*print_endline ("var_id: " ^ S.Var.var_id y);*)
+          if inFun n then (HM.remove stable y;
+          destabilize y)) w in
+        destabilize x
       and solve x phase =
         if tracing then trace "sol2" "solve %a, called: %b, stable: %b\n" S.Var.pretty_trace x (HM.mem called x) (HM.mem stable x);
         init x;
@@ -223,12 +239,28 @@ module WP =
         in
         let obsolete_funs = filter_map (fun c -> match c.old with GFun (f,l) -> Some f | _ -> None) S.increment.changes.changed in
         let removed_funs = filter_map (fun g -> match g with GFun (f,l) -> Some f | _ -> None) S.increment.changes.removed in
-        let obsolete = Set.of_list (List.map (fun a -> "fun" ^ (string_of_int a.Cil.svar.vid))  obsolete_funs) in
+        let obsolete = Hashtbl.create 103 in
+        List.iter (fun f -> Hashtbl.replace obsolete ("fun" ^ (string_of_int f.Cil.svar.vid)) f) obsolete_funs;
+        let obsolete_ret = Set.of_list (List.map (fun f -> "ret" ^ (string_of_int f.Cil.svar.vid)) obsolete_funs) in
 
         List.iter (fun a -> print_endline ("Obsolete function: " ^ a.svar.vname)) obsolete_funs;
 
+        (* save current "node-contained-in-function-map" for next run, load map from previous run for the respective old analysis results *)
+        (*print_endline "saving node map";
+        Serialize.save_node_map S.increment.analyzed_commit_dir MyCFG.stmt_index_hack;
+        print_endline "loading node map";
+        let old_node_map = 
+          match Serialize.load_node_map S.increment.current_commit_dir with 
+          | Some hm -> hm 
+          | None -> print_endline "no node map was loaded. should generally not happen, except for the initial commit"; Hashtbl.create 103 in
+        *)
+
         (* Actually destabilize all nodes contained in changed functions. *)
-        HM.iter (fun k v -> if Set.mem (S.Var.var_id k) obsolete then destabilize k) stable;
+        HM.iter (fun k v -> match Hashtbl.find_option obsolete (S.Var.var_id k) with None -> () | Some f -> destabilize_fun node_map f k) stable;
+
+        (* save entries of changed functions in rho for the comparison whether the result has changed after a function specific solve *)
+        let old_rho = Hashtbl.create 103 in
+        HM.iter (fun k v -> if Set.mem (S.Var.var_id k) obsolete_ret then Hashtbl.replace old_rho k (HM.find rho k)) rho;
 
         (* We remove all unknowns for program points in changed or removed functions from rho, stable, infl and wpoint *)
         let add_nodes_of_fun (functions: fundec list) (nodes)=
@@ -243,16 +275,27 @@ module WP =
         add_nodes_of_fun removed_funs marked_for_deletion;
 
         print_endline "Removing data for changed and removed functions...";
-        let delete_marked s = HM.iter (fun k v -> if Hashtbl.mem  marked_for_deletion (S.Var.var_id k) then HM.remove s k ) s in
+        let delete_marked s = HM.iter (fun k v -> if Hashtbl.mem marked_for_deletion (S.Var.var_id k) then HM.remove s k ) s in
         delete_marked rho;
         delete_marked infl;
         delete_marked wpoint;
         delete_marked stable;
 
-        print_data data "Data after clean-up"
-      );
+        print_data data "Data after clean-up";
 
-      List.iter set_start st;
+        (* solve on the return node of changed functions. Only destabilize influenced nodes outside the function if the analysis result changed *)
+        List.iter set_start st;
+        print_endline "solving changed functions";
+        Hashtbl.iter (fun x v -> ignore @@ Pretty.printf "test for %a\n" MyCFG.pretty_node (S.Var.node x);
+          if Set.mem (S.Var.var_id x) obsolete_ret 
+          then (ignore @@ Pretty.printf "solving for %a\n" MyCFG.pretty_node (S.Var.node x); 
+            solve x Widen; 
+            let old = Hashtbl.find old_rho x in 
+            if not (S.Dom.leq (HM.find rho x) old) then (print_endline "actually destabilize..."; destabilize x) else print_endline "result did not change")
+          ) old_rho;
+      );
+      
+      if !incremental_mode = "off" then List.iter set_start st;
       List.iter init vs;
       List.iter (fun x -> solve x Widen) vs;
       (* iterate until there are no unstable variables
@@ -328,7 +371,7 @@ module WP =
             | Some x -> one_constraint x
           )
         and one_constraint f =
-          ignore (f (fun x -> one_var x; try HM.find rho x with Not_found -> ignore @@ Pretty.printf "reachability: one_constraint: could not find variable %a\n" S.Var.pretty_trace x; S.Dom.bot ()) (fun x _ -> one_var x))
+          ignore (f (fun x -> one_var x; try HM.find rho x with Not_found -> (* ignore @@ Pretty.printf "reachability: one_constraint: could not find variable %a\n" S.Var.pretty_trace x; *) S.Dom.bot ()) (fun x _ -> one_var x))
         in
         List.iter one_var xs;
         HM.iter (fun x v -> if not (HM.mem reachable x) then HM.remove rho x) rho;
@@ -346,9 +389,9 @@ module WP =
       let reuse_wpoint = GobConfig.get_bool "exp.incremental.wpoint" in
       if !incremental_mode <> "off" then (
         let file_in = Filename.concat S.increment.analyzed_commit_dir result_file_name in
-        let loaded, data =  if Sys.file_exists file_in && !incremental_mode <> "complete"
+        let loaded, (data, node_fun_map) =  if Sys.file_exists file_in && !incremental_mode <> "complete"
           then true, Serialize.unmarshal file_in
-          else false, create_empty_data ()
+          else false, (create_empty_data (), Hashtbl.create 103)
         in
         (* This hack is for fixing hashconsing.
          * If hashcons is enabled now, then it also was for the loaded values (otherwise it would crash). If it is off, we don't need to do anything.
@@ -393,18 +436,18 @@ module WP =
           data.infl <- HM.create 10
         );
         if not reuse_wpoint then data.wpoint <- HM.create 10;
-        let result = solve box st vs data in
+        let result = solve box st vs data node_fun_map in
         let path = Goblintutil.create_dir S.increment.current_commit_dir in
         if Sys.file_exists path then (
           let file_out = Filename.concat S.increment.current_commit_dir result_file_name in
           print_endline @@ "Saving solver result to " ^ file_out;
-          Serialize.marshal result file_out;
+          Serialize.marshal (result, MyCFG.stmt_index_hack) file_out;
         );
         clear_data result;
 
         (* Compare current rho to old rho *)
         if Sys.file_exists file_in && !incremental_mode <> "complete" then (
-          let old_rho = (Serialize.unmarshal file_in: solver_data).rho in
+          let old_rho = (Serialize.unmarshal file_in |> fst).rho in
           let eq r s =
             let leq r s = HM.fold (fun k v acc -> acc && (try S.Dom.leq v (HM.find s k) with Not_found -> false)) r true
           in leq r s && leq s r in
@@ -415,7 +458,7 @@ module WP =
       )
       else (
         let data = create_empty_data () in
-        let result = solve box st vs data in
+        let result = solve box st vs data (Hashtbl.create 103) in
         clear_data result;
         result.rho
       )
