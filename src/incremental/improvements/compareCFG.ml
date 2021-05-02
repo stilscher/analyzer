@@ -451,18 +451,15 @@ let print_rect_cfg (module Cfg : CfgForward) rectFunDiff =
   let funs = FunDiffMap.fold (fun n e acc -> n :: acc) rectFunDiff [] in
   print_min_cfg_coloring (module Cfg) funs edgeColoring nodeColoring "cfg_2_rect.dot"
 
-exception Early_diff
-
 let compareCfgs (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 =
   let diff = Hashtbl.create 113 in
   let same = Hashtbl.create 113 in
-  let waitingList : (node * node * int) t = Queue.create () in
-  let boundary = (List.length fun1.sallstmts) /4 in
+  let waitingList : (node * node) t = Queue.create () in
 
   let rec compareNext () =
     if Queue.is_empty waitingList then ()
     else
-      let (fromNode1, fromNode2, i) = Queue.take waitingList in
+      let (fromNode1, fromNode2) = Queue.take waitingList in
       let outList1 = Cfg1.next fromNode1 in
       let outList2 = Cfg2.next fromNode2 in
 
@@ -471,7 +468,7 @@ let compareCfgs (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 
           let edgeList2 = to_edge_list locEdgeList2 in
           if eq_node (toNode1, fun1) (toNode2, fun2) && eq_edge_list edgeList1 edgeList2 then
             (let notIn = Hashtbl.fold (fun (toNode1', toNode2') v acc -> acc && not (Node.equal toNode1 toNode1' && Node.equal toNode2 toNode2')) same true in
-              if notIn then Queue.add (toNode1, toNode2, i+1) waitingList;
+              if notIn then Queue.add (toNode1, toNode2) waitingList;
               Hashtbl.add same (toNode1, toNode2) (); true)
           else false in
         let found = List.fold_right aux outList2 false in
@@ -491,10 +488,10 @@ let compareCfgs (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 
         if posAmbigEdge edgeList1 
           then Hashtbl.add diff toNode1 ()
           else findEquiv (edgeList1, toNode1) in
-    List.iter iterOuts outList1; if i < boundary && Hashtbl.length diff > 0 then raise Early_diff else compareNext () in
+    List.iter iterOuts outList1; compareNext () in
     
   let entryNode1, entryNode2 = (FunctionEntry fun1.svar, FunctionEntry fun2.svar) in
-  Queue.push (entryNode1,entryNode2,1) waitingList; compareNext (); (same, diff)
+  Queue.push (entryNode1,entryNode2) waitingList; compareNext (); (same, diff)
 
 let reexamine f1 f2 same diff (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) =
   let diffNodes1 = Hashtbl.fold (fun n _ acc -> NodeSet.add n acc) diff NodeSet.empty in
@@ -523,10 +520,8 @@ let eqF' (a: Cil.fundec) (module Cfg1 : MyCFG.CfgForward) (b: Cil.fundec) (modul
       List.for_all (fun (x, y) -> eq_varinfo x y) (List.combine a.sformals b.sformals) &&
       List.for_all (fun (x, y) -> eq_varinfo x y) (List.combine a.slocals b.slocals) in
     if not eq_header then (false, None) else
-      try
-        let matches, primRemoved, removed = compareFun (module Cfg1) (module Cfg2) a b in
-        if List.length removed = 0 then (true, None) else (false, Some {unchangedNodes = matches; primOldNodes = primRemoved; oldNodes = removed})
-      with Early_diff -> (false, None)
+      let matches, primRemoved, removed = compareFun (module Cfg1) (module Cfg2) a b in
+      if List.length removed = 0 then (true, None) else (false, Some {unchangedNodes = matches; primOldNodes = primRemoved; oldNodes = removed})
   with Invalid_argument _ -> (* One of the combines failed because the lists have differend length *)
     false, None
 
