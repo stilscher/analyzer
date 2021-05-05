@@ -479,9 +479,15 @@ let main =
         let file = preprocess_files () |> merge_preprocessed in
         let changeInfo = if GobConfig.get_string "exp.incremental.mode" = "off" then Analyses.empty_increment_data ()
           else diff_and_rename' file in
-        do_analyze changeInfo file;
+        (* do_analyze changeInfo file;
         do_stats ();
-        do_html_output ();
+        do_html_output (); *)
+        let cfg, _ = MyCFG.getCFG file in
+        let module Cfg: MyCFG.CfgForward = struct let next = cfg end in
+        let funs = List.filter_map (fun g -> match g with
+          | Cil.GFun (f,l) -> Some (MyCFG.FunctionEntry f.svar)
+          | _ -> None) file.globals in
+        CompareCFG.print_min_cfg_coloring (module Cfg) funs (fun _ _ _ _ -> "black") (fun _ _ -> "black") "cfg_ambig_edges.dot";
         if !verified = Some false then exit 3;  (* verifier failed! *)
         if !Messages.worldStopped then exit 124 (* timeout! *)
       with Exit -> exit 1

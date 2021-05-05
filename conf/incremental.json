@@ -1,7 +1,7 @@
 {
   "ana": {
     "activated": [
-      "base", "mallocWrapper"
+      "base", "mallocWrapper", "expRelation", "threadid", "threadflag", "escape", "mutex"
     ],
     "int": {
       "interval": true,
@@ -23,6 +23,9 @@
     },
     "incremental": {
       "mode": "incremental"
+    },
+    "partition-arrays": {
+      "enabled": true
     }
   },
   "dbg": {

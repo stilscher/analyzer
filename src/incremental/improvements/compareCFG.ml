@@ -399,22 +399,24 @@ let print_min_cfg_coloring (module Cfg : CfgForward) funs edgeColoring nodeColor
   let out = open_out fileName in
 
   let dotDataForFun entryNode =
+    let node_to_unique_id_string n = match n with FunctionEntry f -> "fun" ^ string_of_int f.vid | Function f -> "ret" ^ string_of_int f.vid | Statement s -> string_of_int s.sid in
+    let nodeLabel n = String.escaped (node_to_id_string n ^ ": " ^ node_to_string n) in
+    let print_node n = node_to_unique_id_string n ^ " [ label=\"" ^ nodeLabel n ^ "\", color = \"" ^ nodeColoring entryNode n ^ "\" ];\n" in
     let rec dfs fromNode (vis, acc) =
       if List.mem fromNode vis then (vis, acc) 
       else
-        let nodeLabel = String.map (fun c -> if c='(' || c=')' || c='"' || c='\'' || c='*' then '.' else c) (node_to_id_string fromNode ^ ": " ^ node_to_string fromNode) in
-        let edgeLabel edgeList = String.map (fun c -> if c='(' || c=')' || c='"' || c='\'' || c='*' then '.' else c) (List.fold_right (fun (loc, e) a -> edge_to_string e ^ a) edgeList "") in 
-        let print_edge edgeList toNode = node_to_id_string fromNode ^ " -> " ^ node_to_id_string toNode
-          ^ " [ label = \"" ^ edgeLabel edgeList ^ "\", color = \"" ^ edgeColoring entryNode fromNode (to_edge_list edgeList) toNode ^ "\" ];\n"
-          ^ node_to_id_string fromNode ^ " [ label=\"" ^ nodeLabel ^ "\", color = \"" ^ nodeColoring entryNode fromNode ^ "\" ];\n" in
+        let edgeLabel edgeList = String.escaped (List.fold_right (fun (loc, e) a -> edge_to_string e ^ a) edgeList "") in 
+        let print_edge edgeList toNode = node_to_unique_id_string fromNode ^ " -> " ^ node_to_unique_id_string toNode
+          ^ " [ label = \" " ^ edgeLabel edgeList ^ "\", color = \"" ^ edgeColoring entryNode fromNode (to_edge_list edgeList) toNode ^ "\" ];\n"
+          ^ print_node toNode in
         let succNodes = List.map (fun (e,n) -> n) (Cfg.next fromNode) in
         let ext_acc = List.fold_right (fun (e,n) a -> a ^ (print_edge e n)) (Cfg.next fromNode) acc in
         List.fold_right dfs succNodes (fromNode :: vis, ext_acc) in
     let _, dotEdges = dfs entryNode ([],"") in
-    dotEdges in
+    print_node entryNode ^ dotEdges in
   
-  let dotContent = List.fold_right (fun f a -> dotDataForFun f ^ a) funs "" in
-  Printf.fprintf out "%s" ("digraph cfg {\n" ^ dotContent ^ "}");
+  let content = List.fold_right (fun f a -> dotDataForFun f ^ a) funs "" in
+  Printf.fprintf out "%s" ("\digraph{cfg}{\n" ^ content ^ "}");
   flush out;
   close_out_noerr out
 
