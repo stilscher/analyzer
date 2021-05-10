@@ -55,25 +55,29 @@ struct
   let threadspawn ctx lval f args fctx = D.bot ()
   let exitstate  v = D.top ()
 
+  type id_type = Sid of int | Vid of int
   let heap_hash = Hashtbl.create 113
   let heap_vars = Hashtbl.create 113
 
-  let get_heap_var loc =
-    try Hashtbl.find heap_hash loc
+  let get_heap_var nodeId =
+    try Hashtbl.find heap_hash nodeId
     with Not_found ->
-      let name = "(alloc@" ^ loc.file ^ ":" ^ string_of_int loc.line ^ ")" in
+      let name = match nodeId with 
+        | Sid i -> "(alloc@" ^ "sid" ^ ":" ^ string_of_int i ^ ")" 
+        | Vid i -> "(alloc@" ^ "vid" ^ ":" ^ string_of_int i ^ ")" in
       let newvar = Goblintutil.create_var (makeGlobalVar name voidType) in
-      Hashtbl.add heap_hash loc newvar;
+      Hashtbl.add heap_hash nodeId newvar;
       Hashtbl.add heap_vars newvar.vid ();
       newvar
 
   let query ctx (q:Q.t) : Q.Result.t =
     match q with
     | Q.HeapVar ->
-      let loc = match ctx.local with
-      | `Lifted vinfo -> vinfo
-      | _ -> MyCFG.getLoc ctx.node in
-      `Varinfo (`Lifted (get_heap_var loc))
+      let nodeId = (match ctx.node with
+        | Statement s -> Sid s.sid
+        | Function f -> Vid f.vid
+        | _ -> raise (Failure "A function entry node can never be the node after a malloc")) in
+      `Varinfo (`Lifted (get_heap_var nodeId))
     | Q.IsHeapVar v ->
       `MayBool (Hashtbl.mem heap_vars v.vid)
     | _ -> `Top
