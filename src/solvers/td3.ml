@@ -223,12 +223,11 @@ module WP =
         in
         let obsolete_funs = filter_map (fun c -> match c.old with GFun (f,l) -> Some f | _ -> None) S.increment.changes.changed in
         let removed_funs = filter_map (fun g -> match g with GFun (f,l) -> Some f | _ -> None) S.increment.changes.removed in
-        let obsolete = Set.union (Set.of_list (List.map (fun a -> "ret" ^ (string_of_int a.Cil.svar.vid))  obsolete_funs))
-                                 (Set.of_list (List.map (fun a -> "fun" ^ (string_of_int a.Cil.svar.vid))  obsolete_funs)) in
+        let obsolete = Set.of_list (List.map (fun a -> "fun" ^ (string_of_int a.Cil.svar.vid))  obsolete_funs) in
 
         List.iter (fun a -> print_endline ("Obsolete function: " ^ a.svar.vname)) obsolete_funs;
 
-        (* Actually destabilize all nodes contained in changed functions. TODO only destabilize fun_... nodes *)
+        (* Actually destabilize all nodes contained in changed functions. *)
         HM.iter (fun k v -> if Set.mem (S.Var.var_id k) obsolete then destabilize k) stable;
 
         (* We remove all unknowns for program points in changed or removed functions from rho, stable, infl and wpoint *)
