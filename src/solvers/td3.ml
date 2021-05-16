@@ -244,9 +244,7 @@ module WP =
         print_endline "Destabilizing changed functions...";
 
         (* We need to destabilize all nodes in changed functions *)
-        let filter_map f l =
-          List.fold_left (fun acc el -> match f el with Some x -> x::acc | _ -> acc) [] l
-        in
+        let filter_map f l = List.fold_left (fun acc el -> match f el with Some x -> x::acc | _ -> acc) [] l in
         let obsolete_funs = filter_map (fun c -> match c.old with GFun (f,l) -> Some f | _ -> None) S.increment.changes.changed in
         let removed_funs = filter_map (fun g -> match g with GFun (f,l) -> Some f | _ -> None) S.increment.changes.removed in
         let obsolete_ret = Set.of_list (List.map (fun f -> "ret" ^ (string_of_int f.Cil.svar.vid)) obsolete_funs) in
@@ -302,7 +300,8 @@ module WP =
               destabilize x; HM.replace stable x ())
           ) old_ret;
 
-          if !numDest = 0 then print_endline "no actual destabilization needed!"
+          if !numDest = 0 then print_endline "no actual destabilization needed!";
+          print_endline "final solve"
           (* ignore (Pretty.printf "vars = %d    evals = %d  \n" !Goblintutil.vars !Goblintutil.evals) *)
         )
       );
