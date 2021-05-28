@@ -6,6 +6,7 @@ open Cil
 type nodes_diff = {
   unchangedNodes: (node * node) list;
   primOldNodes: node list;
+  primNewNodes: node list;
 }
 
 type changed_global = {
@@ -251,46 +252,9 @@ let eq_initinfo (a: initinfo) (b: initinfo) = match a.init, b.init with
   | None, None -> true
   | _, _ -> false
 
-
-module StdS = Set.Make (
-  struct
-    let compare = compare
-    type t = (node * node) * (edge list * edge list) * (node * node)
-  end
-)
-
-module DiffS = Set.Make (
-  struct
-    let compare = compare
-    type t = (node * node) * edge list * node 
-  end  
-)
-
-module FunDiffMap = Map.Make(
-  struct
-    let compare = compare
-    type t = node
-  end
-)
-
-module NodeSet = Set.Make (
-    struct
-      let compare = compare
-      type t = node
-    end  
-)
-
-module NodeNodeSet = Set.Make (
-    struct
-      let compare = compare
-      type t = node * node
-    end  
-)
-
 let print_queue q = 
     let f (n1, n2) = Format.printf "(%s,%s)\n" (Pretty.sprint 200 (pretty_node () n1)) (Pretty.sprint 200 (pretty_node () n2)) in 
   Format.printf "queue: "; if Queue.is_empty q then Format.printf "empty\n" else Queue.iter f q
-
 let node_to_string n = Pretty.sprint 200 (pretty_node () n)
 let edge_to_string e = Pretty.sprint 200 (pretty_edge () e)
 let node_to_id_string n = 
@@ -300,20 +264,10 @@ let node_to_id_string n =
     | Function f -> f.vid
     in string_of_int id
 
-let print_std_set s = 
-  let print_elem ((fromNode1, fromNode2), (edgeList1, edgeList2), (toNode1, toNode2)) = 
-    Format.printf "(%s, %s)\n" (node_to_string fromNode2) (node_to_string toNode2) in 
-  Format.printf "std set: "; if StdS.is_empty s then Format.printf "empty\n" else StdS.iter print_elem s
-
-let print_diff_set s =
-  let print_elem ((fromNode1, fromNode2), edgeList2, toNode2) = 
-    Format.printf "((%s, %s), %s)\n" (node_to_string fromNode1) (node_to_string fromNode2) (node_to_string toNode2) in 
-  Format.printf "diff set: "; if DiffS.is_empty s then Format.printf "empty\n" else DiffS.iter print_elem s
-
-(* in contrast to the original eq_varinfo in CompareAST, this method also ignores vinline and vaddrof *)
+(* in contrast to the original eq_varinfo in CompareAST, this method also ignores vinline and vaddrof.
+Ignore the location, vid, vreferenced, vdescr, vdescrpure, vinline, vaddrof, because they are not relevant for the semantic comparison *)
 let eq_varinfo' (a: varinfo) (b: varinfo) = a.vname = b.vname && eq_typ a.vtype b.vtype && eq_list eq_attribute a.vattr b.vattr &&
                                            a.vstorage = b.vstorage && a.vglob = b.vglob
-(* Ignore the location, vid, vreferenced, vdescr, vdescrpure, vinline, vaddrof*)
 
 let eq_instr' (a: instr) (b: instr) = match a, b with
   | Set (lv1, exp1, _l1), Set (lv2, exp2, _l2) -> eq_lval lv1 lv2 && eq_exp exp1 exp2
@@ -365,14 +319,6 @@ let eq_node (x, fun1) (y, fun2) =
   | FunctionEntry f1, FunctionEntry f2 -> eq_varinfo' f1 f2
   | _ -> false
 
-(*
-* consider whether precise comparisons are necessary for
-* Assign, Proc, Entry, Ret, VDecl
-* -> yes, because with exp.mincfg many nodes are "merged" and then exclusively represented in edges
-* is varinfo comparison for fundecs enough?
-* -> varinfo is a unique representation for each global or local variable, but in eq_varinfo' it is only considered partly
-* -> all relevant components are being compare
-*)
 let eq_edge x y = match x, y with
   | Assign (lv1, rv1), Assign (lv2, rv2) -> eq_lval lv1 lv2 && eq_exp rv1 rv2
   | Proc (None,f1,ars1), Proc (None,f2,ars2) -> eq_exp f1 f2 && eq_list eq_exp ars1 ars2
@@ -394,6 +340,7 @@ let eq_edge_list xs ys = eq_list eq_edge xs ys
 
 let to_edge_list ls = List.map (fun (loc, edge) -> edge) ls
 
+(* To print a tex compatible dot file representing the cfgs for the given functions *)
 let print_min_cfg_coloring (module Cfg : CfgForward) funs edgeColoring nodeColoring fileName =
   let out = open_out fileName in
 
@@ -419,39 +366,6 @@ let print_min_cfg_coloring (module Cfg : CfgForward) funs edgeColoring nodeColor
   Printf.fprintf out "%s" ("\digraph{cfg}{\n" ^ content ^ "}");
   flush out;
   close_out_noerr out
-
-let print_min_cfg_diff_2 (module Cfg : CfgForward) funDiff = 
-  let edgeColoring f fromNode edgeList toNode =
-    let stdSet, diffSet = FunDiffMap.find f funDiff in 
-    let compStdSetEntry2 ((_, fn2), (_, el2), (_,tn2)) = Node.equal fn2 fromNode && Node.equal tn2 toNode && eq_list eq_edge edgeList el2 in
-    let inStd = StdS.exists compStdSetEntry2 stdSet in 
-    let compDiffSetEntry2 ((_, fn2), el2, tn2) = Node.equal fn2 fromNode && Node.equal tn2 toNode && eq_list eq_edge edgeList el2 in
-    let inDiff = DiffS.exists compDiffSetEntry2 diffSet in  
-    if inStd && inDiff then "blue"
-    else if inStd then "green" 
-    else if inDiff then "red" else "black" in
-  let nodeColoring f node = "black" in
-  let funs = FunDiffMap.fold (fun n e acc -> n :: acc) funDiff [] in
-print_min_cfg_coloring (module Cfg) funs edgeColoring nodeColoring "cfg_2_diff.dot"
-
-let print_min_cfg_diff_1 (module Cfg : CfgForward) funDiff =
-  let edgeColoring f fromNode edgeList toNode =
-    let stdSet, diffSet = FunDiffMap.find f funDiff in 
-    let compStdSetEntry1 ((fn1,_), (el1,_), (tn1,_)) = Node.equal fn1 fromNode && Node.equal tn1 toNode && eq_list eq_edge edgeList el1 in
-    let inStd = StdS.exists compStdSetEntry1 stdSet in 
-    if inStd then "green" else "black" in
-  let nodeColoring f node = "black" in
-  let funs = FunDiffMap.fold (fun n e acc -> n :: acc) funDiff [] in
-print_min_cfg_coloring (module Cfg) funs edgeColoring nodeColoring "cfg_1_diff.dot"
-
-let print_rect_cfg (module Cfg : CfgForward) rectFunDiff =
-  let edgeColoring f fromNode edgeList toNode = "black" in
-  let nodeColoring f node =
-    let sameRect, diffRect = FunDiffMap.find f rectFunDiff in
-    if NodeNodeSet.exists (fun (_,n) -> Node.equal n node) sameRect then "green" 
-    else if NodeSet.mem node diffRect then "red" else "black" in
-  let funs = FunDiffMap.fold (fun n e acc -> n :: acc) rectFunDiff [] in
-  print_min_cfg_coloring (module Cfg) funs edgeColoring nodeColoring "cfg_2_rect.dot"
 
 let compareCfgs (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 =
   let diff = Hashtbl.create 113 in
@@ -496,9 +410,10 @@ let compareCfgs (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 
   Queue.push (entryNode1,entryNode2) waitingList; compareNext (); (same, diff)
 
 let reexamine f1 f2 same diff (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) =
+  let module NodeSet = Set.Make(Node) in
+  let module NodeNodeSet = Set.Make (struct type t = node * node let compare = compare end) in
   let diffNodes1 = Hashtbl.fold (fun n _ acc -> NodeSet.add n acc) diff NodeSet.empty in
-  let sameNodes = let fromStdSet = Hashtbl.fold (fun (n1, n2) _ acc -> NodeNodeSet.add (n1,n2) acc) same NodeNodeSet.empty in
-    let notInDiff = NodeNodeSet.filter (fun (n1,n2) -> not (NodeSet.mem n1 diffNodes1)) fromStdSet in
+  let sameNodes = let notInDiff = Hashtbl.fold (fun (n1,n2) _ acc -> if NodeSet.mem n1 diffNodes1 then acc else NodeNodeSet.add (n1,n2) acc) same NodeNodeSet.empty in
     NodeNodeSet.add (FunctionEntry f1.svar, FunctionEntry f2.svar) notInDiff in
 
   let diffNodes2, _ =
@@ -529,9 +444,8 @@ let reexamine f1 f2 same diff (module Cfg1 : CfgForward) (module Cfg2 : CfgForwa
 
 let compareFun (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 =
   let same, diff = compareCfgs (module Cfg1) (module Cfg2) fun1 fun2 in
-  let unchanged, primRemoved, added = reexamine fun1 fun2 same diff (module Cfg1) (module Cfg2) in
-  Printf.printf "unchanged: %d, primRemoved: %d, added: %d\n" (List.length unchanged) (List.length primRemoved) (List.length added);
-  unchanged, primRemoved, added
+  let unchanged, diffNodes1, diffNodes2 = reexamine fun1 fun2 same diff (module Cfg1) (module Cfg2) in
+  unchanged, diffNodes1, diffNodes2
 
 let eqF' (a: Cil.fundec) (module Cfg1 : MyCFG.CfgForward) (b: Cil.fundec) (module Cfg2 : MyCFG.CfgForward) =
   try
@@ -539,8 +453,8 @@ let eqF' (a: Cil.fundec) (module Cfg1 : MyCFG.CfgForward) (b: Cil.fundec) (modul
       List.for_all (fun (x, y) -> eq_varinfo x y) (List.combine a.sformals b.sformals) &&
       List.for_all (fun (x, y) -> eq_varinfo x y) (List.combine a.slocals b.slocals) in
     if not eq_header then (false, None) else
-      let matches, primRemoved, added = compareFun (module Cfg1) (module Cfg2) a b in
-      if List.length primRemoved = 0 && List.length added = 0 then (true, None) else (false, Some {unchangedNodes = matches; primOldNodes = primRemoved})
+      let matches, diffNodes1, diffNodes2 = compareFun (module Cfg1) (module Cfg2) a b in
+      if List.length diffNodes1 = 0 && List.length diffNodes2 = 0 then (true, None) else (false, Some {unchangedNodes = matches; primOldNodes = diffNodes1; primNewNodes = diffNodes2})
   with Invalid_argument _ -> (* One of the combines failed because the lists have differend length *)
     false, None
 
@@ -550,46 +464,6 @@ let eq_glob' (a: global) (module Cfg1 : MyCFG.CfgForward) (b: global) (module Cf
 | GVarDecl (x, _), GVarDecl (y, _) -> eq_varinfo x y, None
 | _ -> print_endline @@ "Not comparable: " ^ (Pretty.sprint ~width:100 (Cil.d_global () a)) ^ " and " ^ (Pretty.sprint ~width:100 (Cil.d_global () a)); false, None
 
-(*
-let compare_all_funs file1 file2 =
-  let cfgF1, _ = MyCFG.getCFG file1
-  and cfgF2, _ = MyCFG.getCFG file2 in
-
-  let module Cfg1: CfgForward = struct let next = cfgF1 end in
-  let module Cfg2: CfgForward = struct let next = cfgF2 end in
-
-  let funs1, funs2 =
-    let get_funs file = Cil.foldGlobals file (fun acc glob ->
-            match glob with
-            | GFun (fd,loc) -> fd :: acc
-            | _ -> acc
-          ) []
-    in (get_funs file1, get_funs file2)
-    (*printf "functions to be compared: %s %s\n" (List.hd x).svar.vname (List.hd y).svar.vname; *)
-  in
-
-  let (funDiff, funDiffRect) =
-    let sort = List.sort (fun f g -> String.compare f.svar.vname g.svar.vname) in
-    let rec aux funs1 funs2 (acc, accRect) =
-      match funs1, funs2 with
-      | [], [] -> (acc, accRect)
-      | f1::funs1', f2::funs2' -> 
-          assert (f1.svar.vname = f2.svar.vname);
-          let (stdSet, diffSet) = compareCfgs (module Cfg1) (module Cfg2) f1 f2 in
-          let (rectSame, rectPrimDiff, rectDiff) = reexamine f1 f2 stdSet diffSet (module Cfg2) in
-          let entryNode2 = FunctionEntry f2.svar in
-          aux funs1' funs2' (FunDiffMap.add entryNode2 (stdSet, diffSet) acc, FunDiffMap.add entryNode2 (rectSame, rectPrimDiff) accRect)
-      | _, _ -> raise (Invalid_argument "Function to be compared not in both files") in
-    aux (sort funs1) (sort funs2) (FunDiffMap.empty, FunDiffMap.empty) in
-  
-  assert (List.length funs1 = List.length funs2);
-  print_min_cfg_diff_2 (module Cfg2) funDiff;
-  print_min_cfg_diff_1 (module Cfg1) funDiff;
-  print_rect_cfg (module Cfg2) funDiffRect;
-  funDiff
-*)
-
-(* Returns a list of changed functions *)
 let compareCilFiles (oldAST: file) (newAST: file) =
   if get_bool "dbg.verbose" then print_endline ("comparing cil files based on cfg...");
   let oldCfg, _ = MyCFG.getCFG oldAST in

@@ -95,28 +95,11 @@ let update_ids (old_file: file) (ids: max_ids) (new_file: file) (map: (global_id
       List.iter (fun l -> update_vid_max l.vid) f.slocals;
       List.iter (fun f -> update_vid_max f.vid) f.sformals;
 
-      (* Keeping this order when updating ids is very important since Node.equal in reset_unchanged_nodes tests only 
+      (* Keeping this order when updating ids is very important since Node.equal in assign_same_id tests only
       for id equality. Otherwise some new nodes might not receive a new id and lead to duplicate ids in the 
       respective function *)
       List.iter (reset_changed_stmt (List.map snd d.unchangedNodes)) f.sallstmts;
-      List.iter (assign_same_id f.sallstmts) d.unchangedNodes;
-
-      (* pseudo return nodes are not created until the MyCFG generation. Therefor their ids need to be updated after. 
-      To implement this, pseudo return nodes (Statements that are in d.newNodes or d.unchangedNodes but not in f.sallstmts) will be 
-      collected here. *)
-      (*
-      let cache_new_pseudo_return_id n = match n with 
-        | Statement s -> 
-            if not (List.mem s f.sallstmts) then (s.sid <- make_sid (); Hashtbl.add pseudo_returns f s.sid)
-        | _ -> () in
-      List.iter cache_new_pseudo_return_id d.newNodes;
-
-      let cache_pseudo_return_id n = match n with 
-        | Statement s -> 
-            if not (List.mem s f.sallstmts) then Hashtbl.add pseudo_returns f s.sid
-        | _ -> () in
-      List.iter cache_pseudo_return_id (List.map snd d.unchangedNodes)
-      *)      
+      List.iter (assign_same_id f.sallstmts) d.unchangedNodes
   in
   let reset_changed_globals (changed: changed_global) =
     match (changed.current, changed.old) with
