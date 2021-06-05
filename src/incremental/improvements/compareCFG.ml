@@ -383,12 +383,17 @@ let compareCfgs (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 
         let aux (locEdgeList2, toNode2) b = if b then b else
           let edgeList2 = to_edge_list locEdgeList2 in
           if eq_node (toNode1, fun1) (toNode2, fun2) && eq_edge_list edgeList1 edgeList2 then
-            (let notIn = Hashtbl.fold (fun (toNode1', toNode2') v acc -> acc && not (Node.equal toNode1 toNode1' && Node.equal toNode2 toNode2')) same true in
-              if notIn then Queue.add (toNode1, toNode2) waitingList;
-              Hashtbl.add same (toNode1, toNode2) (); true)
+            let notIn, matchedAlready = 
+              Hashtbl.fold (fun (toNode1', toNode2') v (ni, nm) -> 
+                let node1equal = Node.equal toNode1 toNode1' in 
+                let node2equal = Node.equal toNode2 toNode2' in 
+                (ni && not (node1equal && node2equal), nm || (node1equal && not node2equal))) same (true, false) in
+            if matchedAlready then false
+            else (if notIn then Queue.add (toNode1, toNode2) waitingList;
+              Hashtbl.replace same (toNode1, toNode2) (); true)
           else false in
         let found = List.fold_right aux outList2 false in
-        if not found then Hashtbl.add diff toNode1 () in
+        if not found then Hashtbl.replace diff toNode1 () in
        
       let iterOuts (locEdgeList1, toNode1) = 
         let edgeList1 = to_edge_list locEdgeList1 in
@@ -402,7 +407,7 @@ let compareCfgs (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 
           let numDuplicates l = List.length (List.find_all findTestFalseEdge l) in
           testFalseEdge (List.hd edgeList) && (numDuplicates outList1 > 1 || numDuplicates outList2 > 1) in
         if posAmbigEdge edgeList1 
-          then Hashtbl.add diff toNode1 ()
+          then Hashtbl.replace diff toNode1 ()
           else findEquiv (edgeList1, toNode1) in
     List.iter iterOuts outList1; compareNext () in
     
