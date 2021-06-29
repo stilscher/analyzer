@@ -56,18 +56,18 @@ struct
   let exitstate  v = D.top ()
 
   type id_type = Sid of int | Vid of int
-  let heap_hash = Hashtbl.create 113
-  let heap_vars = Hashtbl.create 113
+  let heap_hash = ref (Hashtbl.create 113)
+  let heap_vars = ref (Hashtbl.create 113)
 
-  let get_heap_var nodeId =
-    try Hashtbl.find heap_hash nodeId
+  let get_heap_var nodeId node =
+    try Hashtbl.find !heap_hash nodeId
     with Not_found ->
       let name = match nodeId with 
         | Sid i -> "(alloc@" ^ "sid" ^ ":" ^ string_of_int i ^ ")" 
         | Vid i -> "(alloc@" ^ "vid" ^ ":" ^ string_of_int i ^ ")" in
       let newvar = Goblintutil.create_var (makeGlobalVar name voidType) in
-      Hashtbl.add heap_hash nodeId newvar;
-      Hashtbl.add heap_vars newvar.vid ();
+      Hashtbl.add !heap_hash nodeId newvar;
+      Hashtbl.add !heap_vars newvar.vid ();
       newvar
 
   let query ctx (q:Q.t) : Q.Result.t =
@@ -77,15 +77,25 @@ struct
         | Statement s -> Sid s.sid
         | Function f -> Vid f.vid
         | _ -> raise (Failure "A function entry node can never be the node after a malloc")) in
-      `Varinfo (`Lifted (get_heap_var nodeId))
+      `Varinfo (`Lifted (get_heap_var nodeId ctx.node))
     | Q.IsHeapVar v ->
-      `MayBool (Hashtbl.mem heap_vars v.vid)
+      `MayBool (Hashtbl.mem !heap_vars v.vid)
     | _ -> `Top
 
     let init () =
       List.iter (fun wrapper -> Hashtbl.replace wrappers wrapper ()) (get_string_list "exp.malloc.wrappers");
-      Hashtbl.clear heap_hash;
-      Hashtbl.clear heap_vars
+      Hashtbl.clear !heap_hash;
+      Hashtbl.clear !heap_vars;
+      let incremental_mode = GobConfig.get_string "exp.incremental.mode" in
+      if incremental_mode <> "off" then (
+        match Serialize.load_heap_vars () with
+        | Some (h,v) -> heap_hash := h; heap_vars := v
+        | None -> ()
+      )
+
+    let finalize () =
+      let incremental_mode = GobConfig.get_string "exp.incremental.mode" in
+      if incremental_mode <> "off" then Serialize.save_heap_vars (!heap_hash, !heap_vars)
 end
 
 let _ =
