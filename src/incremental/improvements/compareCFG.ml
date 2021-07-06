@@ -448,8 +448,8 @@ let reexamine f1 f2 same diff (module Cfg1 : CfgForward) (module Cfg2 : CfgForwa
   (NodeNodeSet.elements sameNodes', NodeSet.elements diffNodes1', NodeSet.elements diffNodes2')
 
 let compareFun (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 =
-  let same, diff = compareCfgs (module Cfg1) (module Cfg2) fun1 fun2 in
-  let unchanged, diffNodes1, diffNodes2 = reexamine fun1 fun2 same diff (module Cfg1) (module Cfg2) in
+  let same, diff = Stats.time "compCfg_phase1" (compareCfgs (module Cfg1) (module Cfg2) fun1) fun2 in
+  let unchanged, diffNodes1, diffNodes2 = Stats.time "compCfg_phase2" (reexamine fun1 fun2 same diff (module Cfg1)) (module Cfg2) in
   unchanged, diffNodes1, diffNodes2
 
 let eqF' (a: Cil.fundec) (module Cfg1 : MyCFG.CfgForward) (b: Cil.fundec) (module Cfg2 : MyCFG.CfgForward) =
@@ -458,13 +458,13 @@ let eqF' (a: Cil.fundec) (module Cfg1 : MyCFG.CfgForward) (b: Cil.fundec) (modul
       List.for_all (fun (x, y) -> eq_varinfo x y) (List.combine a.sformals b.sformals) &&
       List.for_all (fun (x, y) -> eq_varinfo x y) (List.combine a.slocals b.slocals) in
     if not eq_header then (false, None) else
-      let matches, diffNodes1, diffNodes2 = compareFun (module Cfg1) (module Cfg2) a b in
+      let matches, diffNodes1, diffNodes2 = Stats.time "compCfg" (compareFun (module Cfg1) (module Cfg2) a) b in
       if List.length diffNodes1 = 0 && List.length diffNodes2 = 0 then (true, None) else (false, Some {unchangedNodes = matches; primOldNodes = diffNodes1; primNewNodes = diffNodes2})
   with Invalid_argument _ -> (* One of the combines failed because the lists have differend length *)
     false, None
 
 let eq_glob' (a: global) (module Cfg1 : MyCFG.CfgForward) (b: global) (module Cfg2 : MyCFG.CfgForward) = match a, b with
-| GFun (f,_), GFun (g,_) -> eqF' f (module Cfg1) g (module Cfg2)
+| GFun (f,_), GFun (g,_) -> Stats.time "eqF" (eqF' f (module Cfg1) g) (module Cfg2)
 | GVar (x, init_x, _), GVar (y, init_y, _) -> eq_varinfo x y, None (* ignore the init_info - a changed init of a global will lead to a different start state *)
 | GVarDecl (x, _), GVarDecl (y, _) -> eq_varinfo x y, None
 | _ -> print_endline @@ "Not comparable: " ^ (Pretty.sprint ~width:100 (Cil.d_global () a)) ^ " and " ^ (Pretty.sprint ~width:100 (Cil.d_global () a)); false, None
