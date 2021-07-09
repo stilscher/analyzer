@@ -21,12 +21,12 @@ condition = (df['changed'] == 0) & (df['added'] == 0) & (df['removed'] == 0) & (
 df.drop(df.index[condition], inplace=True)
 df['evals-orig']=df['evals-orig']/100
 df['evals-new']=df['evals-new']/100
-df.rename(columns={'l_max': 'LOC', 'evals-orig': 'Previously required evaluations / 100', 'evals-new': 'Evaluations with reluctant destabilization / 100'}, inplace=True)
+df.rename(columns={'l_max': 'changed LOC', 'evals-orig': 'Previously required evaluations / 100', 'evals-new': 'Evaluations with reluctant destabilization / 100'}, inplace=True)
 
 f, (ax, ax2) = plt.subplots(2, 1, sharex=True)
 # plot the same data on both axes
-df.plot(ax=ax, x="index_commit", y=["LOC", "Previously required evaluations / 100", "Evaluations with reluctant destabilization / 100"], kind="bar", width=0.7, figsize=(8,6))
-df.plot(ax=ax2, x="index_commit", y=["LOC", "Previously required evaluations / 100", "Evaluations with reluctant destabilization / 100"], kind="bar", width=0.7, figsize=(8,6))
+df.plot(ax=ax, x="index_commit", y=["changed LOC", "Previously required evaluations / 100", "Evaluations with reluctant destabilization / 100"], kind="bar", width=0.7, figsize=(8,6))
+df.plot(ax=ax2, x="index_commit", y=["changed LOC", "Previously required evaluations / 100", "Evaluations with reluctant destabilization / 100"], kind="bar", width=0.7, figsize=(8,6))
 
 # limit the view to different portions of the data
 ax.set_ylim(390,480)  # outliers only

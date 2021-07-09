@@ -35,9 +35,9 @@ print(df)
 
 condition = (df['changed'] == 0) & (df['added'] == 0) & (df['removed'] == 0) & (df['changed_start'] == 0) & (df['new_start'] == 0)
 df.drop(df.index[condition], inplace=True)
-df.rename(columns={'l_max': 'changed LOC', 'time-orig-avg': 'Run time of the basic incremental analysis', 'time-new-avg': 'Run time of the analysis run with reluctant destabilization'}, inplace=True)
+df.rename(columns={'l_max': 'changed LOC', 'time-orig-avg': 'Runtime of the basic incremental analysis in s', 'time-new-avg': 'Runtime of the analysis run with reluctant destabilization in s'}, inplace=True)
 
-df.plot(x="index_commit", y=["changed LOC", "Run time of the basic incremental analysis", "Run time of the analysis run with reluctant destabilization"], kind="bar", yerr={'Run time of the basic incremental analysis': df['time-orig-var'], 'Run time of the analysis run with reluctant destabilization': df['time-new-var']}, width=0.7, figsize=(8,6), capsize=2)
+df.plot(x="index_commit", y=["changed LOC", "Runtime of the basic incremental analysis in s", "Runtime of the analysis run with reluctant destabilization in s"], kind="bar", yerr={'Runtime of the basic incremental analysis in s': df['time-orig-var'], 'Runtime of the analysis run with reluctant destabilization in s': df['time-new-var']}, width=0.7, figsize=(8,6), capsize=2)
 plt.ylim(top=15)
 plt.xlabel("Commit")
 plt.legend(loc="upper right")
