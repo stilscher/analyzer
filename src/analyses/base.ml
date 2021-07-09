@@ -837,6 +837,7 @@ struct
     let r = match eval_rv_no_ask_evalint ask gs st e with
     | `Int i -> i (* TODO: cast to right ikind here? or is it guaranteed? *)
     | `Bot   -> Queries.ID.bot () (* TODO: remove? *)
+    | `Top   -> Queries.ID.top () (* TODO: remove? *)
     (* | v      -> M.warn ("Query function answered " ^ (VD.show v)); Queries.Result.top q *)
     | v      -> M.warn ("Query function answered " ^ (VD.show v)); Queries.ID.bot ()
     in
