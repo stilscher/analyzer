@@ -1,4 +1,4 @@
-open CompareAST
+open CompareCFG
 open Cil
 open Serialize
 
@@ -30,20 +30,20 @@ let create_map (new_file: Cil.file) (commit: commitID) =
   in
   let tbl : (global_identifier, Cil.global * commitID) Hashtbl.t = Hashtbl.create 1000 in
   Cil.iterGlobals new_file (add_to_hashtbl tbl);
-  tbl, {max_sid = !max_sid; max_vid =  !max_vid}
+  tbl, {max_sid = !max_sid; max_vid = !max_vid}
 
 (* Load and update the version map *)
 let load_and_update_map (folder: string) (old_commit: commitID) (new_commit: commitID) (oldFile: Cil.file) (newFile: Cil.file) =
   let commitFolder = Filename.concat folder old_commit in
   let versionFile = Filename.concat commitFolder version_map_filename in
-  let (oldMap, max_ids) = Serialize.unmarshal versionFile in
+  let (oldMap, max_ids) = unmarshal versionFile in
   let (updated, changes) = updateMap oldFile newFile new_commit oldMap in
   (updated, changes, max_ids)
 
 let restore_map (folder: string) (old_file: Cil.file) (new_file: Cil.file) =
-  match Serialize.current_commit () with
+  match current_commit () with
   |Some new_commit ->
-    (match (Serialize.last_analyzed_commit ()) with
+    (match (last_analyzed_commit ()) with
      |Some old_commit -> load_and_update_map folder old_commit new_commit old_file new_file
      |None -> raise (Failure "No commit has been analyzed yet. Restore map failed."))
   |None -> raise (Failure "Working directory is dirty. Restore map failed.")

@@ -379,67 +379,31 @@ let store_map updated_map max_ids = (* Creates the directory for the commit *)
     Serialize.marshal (updated_map, max_ids) map_file_name
   | None -> ()
 
-let do_stats () =
-  if get_bool "printstats" then
-    ignore (Pretty.printf "vars = %d    evals = %d  \n" !Goblintutil.vars !Goblintutil.evals);
-    print_newline ();
-    Stats.print (Messages.get_out "timing" Legacy.stderr) "Timings:\n";
-    flush_all ()
+(* Detects changes and renames vids and sids. *)
+let diff_and_rename file =
+  Serialize.src_direcotry := src_path ();
 
-let update_map' old_file new_file =
-  let dir = SerializeCFG.gob_directory () in
-  VersionLookupCFG.restore_map dir old_file new_file
-
-let store_map' updated_map max_ids = (* Creates the directory for the commit *)
-  match SerializeCFG.current_commit_dir () with
-  | Some commit_dir ->
-    let map_file_name = Filename.concat commit_dir SerializeCFG.version_map_filename in
-    SerializeCFG.marshal (updated_map, max_ids) map_file_name
-  | None -> ()
-
-let diff_and_rename' file =
-  SerializeCFG.src_direcotry := src_path ();
-
-  let change_info = (match SerializeCFG.current_commit () with
+  let change_info = (match Serialize.current_commit () with
       | Some current_commit -> ((* "put the preparation for incremental analysis here!" *)
           if get_bool "dbg.verbose" then print_endline ("incremental mode running on commit " ^ current_commit);
           let (changes, last_analyzed_commit) =
-            (match SerializeCFG.last_analyzed_commit () with
-             | Some last_analyzed_commit -> (match SerializeCFG.load_latest_cfg !cFileNames with
+            (match Serialize.last_analyzed_commit () with
+             | Some last_analyzed_commit -> (match Serialize.load_latest_cil !cFileNames with
                  | Some file2 ->
-                   let (version_map, changes, max_ids) = Goblintutil.time (update_map' file2) file "update_map" in
-                   (* List.(Printf.printf "change_info = { unchanged = %d; changed = %d; added = %d; removed = %d }\n" (length changes.unchanged) (length changes.changed) (length changes.added) (length changes.removed));
-                   List.iter (fun g -> print_endline ("changed global: " ^ (CompareCFG.identifier_of_global g.CompareCFG.current).name)
-                    (* (match (CompareCFG.identifier_of_global g.CompareCFG.current).global_t with Fun -> print_endline "Fun" | Var -> print_endline "Var" | Decl -> print_endline "Decl" | _ -> print_endline "Other"); *)
-                    (* match g.CompareCFG.diff with None -> print_endline "no diff" | Some d -> print_endline "primary old nodes"; List.iter (fun n -> print_endline (CompareCFG.node_to_string n)) d.oldNodes *)) changes.changed;
-                   List.iter (fun g -> print_endline ("unchanged global: " ^ (CompareCFG.identifier_of_global g).name)) changes.unchanged;
-                   List.iter (fun g -> print_endline ("removed global: " ^ (CompareCFG.identifier_of_global g).name)) changes.removed;
-                   List.iter (fun g -> print_endline ("added global: " ^ (CompareCFG.identifier_of_global g).name)) changes.added; *)
-                   (* let file_copy = Obj.obj (Obj.dup (Obj.repr file)) in *)
-                   let max_ids = Goblintutil.time (UpdateCfg.update_ids file2 max_ids file version_map current_commit) changes "update_ids" in
-                   (* let new_changes = CompareCFG.compareCilFiles file_copy file in
-                   let cond1 = List.length new_changes.changed = 0 in
-                   let cond2 = List.length new_changes.removed = 0 in
-                   if cond1 && cond2 then print_endline "\nOK!\n";
-                   assert (if not cond1 then print_endline "changed set must be empty";
-                   List.iter (fun cg -> match cg.CompareCFG.current with 
-                      Cil.GFun (f,l) -> print_endline f.svar.vname; (match cg.CompareCFG.diff with 
-                          None -> print_endline "no diff" 
-                        | Some d -> Printf.printf "some diff: %d %d %d\n" (List.length d.unchangedNodes) (List.length d.primOldNodes) (List.length d.oldNodes))
-                    | _ -> print_endline "changed global") new_changes.changed; cond1);
-                   assert (if not cond2 then print_endline "removed set must be empty"; cond2); *)
-                   store_map' version_map max_ids;
+                   let (version_map, changes, max_ids) = update_map file2 file in
+                   let max_ids = UpdateCfg.update_ids file2 max_ids file version_map current_commit changes in
+                   store_map version_map max_ids;
                    (changes, last_analyzed_commit)
-                 | None -> failwith "No cfg.data from previous analysis found!"
+                 | None -> failwith "No ast.data from previous analysis found!"
                )
-             | None -> (match SerializeCFG.current_commit_dir () with
+             | None -> (match Serialize.current_commit_dir () with
                  | Some commit_dir ->
-                   let (version_map, max_ids) = VersionLookupCFG.create_map file current_commit in
-                   store_map' version_map max_ids;
+                   let (version_map, max_ids) = VersionLookup.create_map file current_commit in
+                   store_map version_map max_ids;
                    (CompareCFG.empty_change_info (), "")
                  | None -> failwith "Directory for storing the results of the current run could not be created!")
             ) in
-          SerializeCFG.save_cfg file;
+          Serialize.save_cil file;
           let analyzed_commit_dir = Filename.concat (data_path ()) last_analyzed_commit in
           let current_commit_dir = Filename.concat (data_path ()) current_commit in
           Cilfacade.print_to_file (Filename.concat current_commit_dir "cil.c") file;
@@ -452,6 +416,13 @@ let diff_and_rename' file =
         )
       | None -> failwith "Failure! Working directory is not clean")
   in change_info
+
+let do_stats () =
+  if get_bool "printstats" then
+    ignore (Pretty.printf "vars = %d    evals = %d  \n" !Goblintutil.vars !Goblintutil.evals);
+    print_newline ();
+    Stats.print (Messages.get_out "timing" Legacy.stderr) "Timings:\n";
+    flush_all ()
 
 (** the main function *)
 let main =
@@ -477,17 +448,10 @@ let main =
           print_endline command;
         );
         let file = preprocess_files () |> merge_preprocessed in
-        let changeInfo = if GobConfig.get_string "exp.incremental.mode" = "off" then Analyses.empty_increment_data ()
-          else diff_and_rename' file in
-        do_analyze changeInfo file;
+        let changeInfo = if GobConfig.get_string "exp.incremental.mode" = "off" then Analyses.empty_increment_data () else diff_and_rename file in
+        file |> do_analyze changeInfo;
         do_stats ();
         do_html_output ();
-        (*let cfg, _ = MyCFG.getCFG file in
-        let module Cfg: MyCFG.CfgForward = struct let next = cfg end in
-        let funs = List.filter_map (fun g -> match g with
-          | Cil.GFun (f,l) -> Some (MyCFG.FunctionEntry f.svar)
-          | _ -> None) file.globals in
-        CompareCFG.print_min_cfg_coloring (module Cfg) funs (fun _ _ _ _ -> "black") (fun _ _ -> "black") "cfg2.dot"; *)
         if !verified = Some false then exit 3;  (* verifier failed! *)
         if !Messages.worldStopped then exit 124 (* timeout! *)
       with Exit -> exit 1
