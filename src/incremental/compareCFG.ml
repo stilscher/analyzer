@@ -380,20 +380,24 @@ let compareCfgs (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 
       let outList2 = Cfg2.next fromNode2 in
 
       let findEquiv (edgeList1, toNode1) =
-        let aux (locEdgeList2, toNode2) b = if b then b else
-          let edgeList2 = to_edge_list locEdgeList2 in
-          if eq_node (toNode1, fun1) (toNode2, fun2) && eq_edge_list edgeList1 edgeList2 then
-            let notIn, matchedAlready = 
-              Hashtbl.fold (fun (toNode1', toNode2') v (ni, nm) -> 
-                let node1equal = Node.equal toNode1 toNode1' in 
-                let node2equal = Node.equal toNode2 toNode2' in 
-                (ni && not (node1equal && node2equal), nm || (node1equal && not node2equal))) same (true, false) in
-            if matchedAlready then false
-            else (if notIn then Queue.add (toNode1, toNode2) waitingList;
-              Hashtbl.replace same (toNode1, toNode2) (); true)
-          else false in
-        let found = List.fold_right aux outList2 false in
-        if not found then Hashtbl.replace diff toNode1 () in
+        let rec aux remSuc = match remSuc with
+          | [] -> Hashtbl.replace diff toNode1 ()
+          | (locEdgeList2, toNode2)::remSuc' ->
+              let edgeList2 = to_edge_list locEdgeList2 in
+              if eq_node (toNode1, fun1) (toNode2, fun2) && eq_edge_list edgeList1 edgeList2 then
+                (
+                  let notInSame, matchedAlready =
+                    Hashtbl.fold (fun (toNode1', toNode2') v (ni, ma) ->
+                      let n1equal = Node.equal toNode1 toNode1' in
+                      let n2equal = Node.equal toNode2 toNode2' in
+                      (ni && not (n1equal && n2equal), ma || (n1equal && not n2equal))) same (true, false) in
+                  if matchedAlready then Hashtbl.replace diff toNode1 ()
+                  else Hashtbl.replace same (toNode1, toNode2) ();
+                  if notInSame then Queue.add (toNode1, toNode2) waitingList;
+                  Hashtbl.replace same (toNode1, toNode2) ()
+                )
+              else aux remSuc' in
+        aux outList2 in
        
       let iterOuts (locEdgeList1, toNode1) = 
         let edgeList1 = to_edge_list locEdgeList1 in
