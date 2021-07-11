@@ -164,16 +164,6 @@ let createCFG (file: file) =
   let cfgB = H.create 113 in
   if Messages.tracing then Messages.trace "cfg" "Starting to build the cfg.\n\n";
 
-(*
-  let sid_max = ref 0 in
-  let update_sids (glob: global) = 
-    match glob with
-    | GFun (fn, loc) -> List.iter (fun s -> if s.sid > !sid_max then sid_max := s.sid) fn.sallstmts
-    | _ -> () in
-  Cil.iterGlobals file update_sids;
-  (match pseudo_returns with | None -> () | Some ht -> Hashtbl.iter (fun f i -> if i > !sid_max then sid_max := i) ht);
-*)
-
   (* Utility function to add stmt edges to the cfg *)
   let addCfg' t xs f =
     if Messages.tracing then
@@ -323,10 +313,6 @@ let createCFG (file: file) =
   if Messages.tracing then Messages.trace "cfg" "CFG building finished.\n\n";
   cfgF, cfgB
 
-(*
-let createCFG (file: file) =
-  createCFG' file None
-*)
 let print cfg  =
   let out = open_out "cfg.dot" in
   let module NH = Hashtbl.Make (Node) in
@@ -484,17 +470,6 @@ let getCFG (file: file) : cfg * cfg =
   in
   if get_bool "justcfg" then print cfgB;
   H.find_all cfgF, H.find_all cfgB
-
-let getCFGTbl (file: file) =
-  let cfgF, cfgB = createCFG file in
-  let cfgF, cfgB =
-    if get_bool "exp.mincfg" then
-      Stats.time "minimizing the cfg" minimizeCFG (cfgF, cfgB)
-    else
-      (cfgF, cfgB)
-  in
-  if get_bool "justcfg" then print cfgB;
-  cfgF, cfgB
 
 let get_containing_function (stmt: stmt): fundec = Hashtbl.find stmt_index_hack stmt.sid
 

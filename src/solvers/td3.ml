@@ -43,12 +43,6 @@ module WP =
         Printf.printf "%s:\n|rho|=%d\n|stable|=%d\n|infl|=%d\n|wpoint|=%d\n"
           str (HM.length data.rho) (HM.length data.stable) (HM.length data.infl) (HM.length data.wpoint)
 
-    let print_data_ext data str =
-      if GobConfig.get_bool "dbg.verbose" then
-        Printf.printf "%s:\n|rho|=%d\n|stable|=%d\n|infl|=%d\n|wpoint|=%d\n"
-          str (HM.length data.rho) (HM.length data.stable) (HM.length data.infl) (HM.length data.wpoint);
-        HM.iter (fun v d -> ignore @@ Pretty.printf "%s\n" (node_to_string (S.Var.node v))) data.rho
-
     let exists_key f hm = HM.fold (fun k _ a -> a || f k) hm false
 
     module P =
