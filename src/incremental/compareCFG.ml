@@ -268,9 +268,8 @@ let eq_instr' (a: instr) (b: instr) = match a, b with
   | VarDecl (v1, _l1), VarDecl (v2, _l2) -> eq_varinfo' v1 v2
   | _, _ -> false
 
-(* in contrast to the similar method eq_stmtkind in CompareAST, 
-this method does not compare the inner body, that is sub blocks,
-of if and switch statements *)
+(* in contrast to the similar method eq_stmtkind in CompareAST, this method does not compare the inner body, 
+that is sub blocks, of if and switch statements *)
 let eq_stmtkind' ((a, af): stmtkind * fundec) ((b, bf): stmtkind * fundec) =
   let eq_block' = fun x y -> eq_block (x, af) (y, bf) in
   match a, b with
@@ -359,11 +358,11 @@ let compareCfgs (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 
                 )
               else aux remSuc' in
         aux outList2 in
-       
-      let iterOuts (locEdgeList1, toNode1) = 
+
+      let iterOuts (locEdgeList1, toNode1) =
         let edgeList1 = to_edge_list locEdgeList1 in
         (* Differentiate between a possibly duplicate Test(1,false) edge and a single occurence. In the first
-        case the edge is directly added to the diff set to avoid undetected ambiguities during the recursive 
+        case the edge is directly added to the diff set to avoid undetected ambiguities during the recursive
         call. *)
         let testFalseEdge edge = match edge with
           | Test (p,b) -> p = Cil.one && b = false
@@ -371,11 +370,11 @@ let compareCfgs (module Cfg1 : CfgForward) (module Cfg2 : CfgForward) fun1 fun2 
         let posAmbigEdge edgeList = let findTestFalseEdge (ll,_) = testFalseEdge (snd (List.hd ll)) in
           let numDuplicates l = List.length (List.find_all findTestFalseEdge l) in
           testFalseEdge (List.hd edgeList) && (numDuplicates outList1 > 1 || numDuplicates outList2 > 1) in
-        if posAmbigEdge edgeList1 
+        if posAmbigEdge edgeList1
           then Hashtbl.replace diff toNode1 ()
           else findEquiv (edgeList1, toNode1) in
     List.iter iterOuts outList1; compareNext () in
-    
+
   let entryNode1, entryNode2 = (FunctionEntry fun1.svar, FunctionEntry fun2.svar) in
   Queue.push (entryNode1,entryNode2) waitingList; compareNext (); (same, diff)
 

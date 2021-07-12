@@ -217,7 +217,6 @@ module WP =
 
         print_endline "Destabilizing changed functions...";
 
-        let f () = 
         (* We need to destabilize all nodes in changed functions *)
         let filter_map f l =
           List.fold_left (fun acc el -> match f el with Some x -> x::acc | _ -> acc) [] l
@@ -257,9 +256,7 @@ module WP =
         delete_marked rho;
         delete_marked infl;
         delete_marked wpoint;
-        delete_marked stable in
-
-        Goblintutil.time f () "td3-cleanup";
+        delete_marked stable;
 
         print_data data "Data after clean-up"
       );

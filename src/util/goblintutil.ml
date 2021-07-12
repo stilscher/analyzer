@@ -5,12 +5,6 @@ open GobConfig
 
 open Json
 
-let time f x s =
-    let t = Sys.time() in
-    let fx = f x in
-    Printf.printf "Execution time %s: %f\n" s (Sys.time() -. t);
-    fx
-
 (** Outputs information about what the goblin is doing *)
 (* let verbose = ref false *)
 
