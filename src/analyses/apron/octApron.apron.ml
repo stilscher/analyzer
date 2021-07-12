@@ -99,7 +99,7 @@ struct
         D.top_env (A.env ctx.local)
 
 
-  let assert_fn ctx e should_warn change =
+  let assert_fn ctx e change =
     if not change then
       ctx.local
     else
@@ -112,10 +112,10 @@ struct
       begin
         match LibraryFunctions.classify f.vname args with
         | `Unknown "printf" -> ctx.local
-        | `Unknown "__goblint_check" -> assert_fn ctx (List.hd args) true false
-        | `Unknown "__goblint_commit" -> assert_fn ctx (List.hd args) false true
-        | `Unknown "__goblint_assert" -> assert_fn ctx (List.hd args) true true
-        | `Assert e -> assert_fn ctx e (get_bool "dbg.debug") (not (get_bool "dbg.debug"))
+        | `Unknown "__goblint_check" -> assert_fn ctx (List.hd args) false
+        | `Unknown "__goblint_commit" -> assert_fn ctx (List.hd args) true
+        | `Unknown "__goblint_assert" -> assert_fn ctx (List.hd args) true
+        | `Assert e -> assert_fn ctx e (not (get_bool "dbg.debug"))
         | `Malloc size ->
           (match r with
             | Some lv ->

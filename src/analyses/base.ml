@@ -1916,7 +1916,7 @@ struct
       end
     | _ ->  []
 
-  let assert_fn ctx e should_warn change =
+  let assert_fn ctx e change =
     (* make the state meet the assertion in the rest of the code *)
     if not change then ctx.local else begin
       let newst = invariant ctx (Analyses.ask_of_ctx ctx) ctx.global ctx.local e true in
@@ -2089,10 +2089,10 @@ struct
       end
     (* Handling the assertions *)
     | `Unknown "__assert_rtn" -> raise Deadcode (* gcc's built-in assert *)
-    | `Unknown "__goblint_check" -> assert_fn ctx (List.hd args) true false
-    | `Unknown "__goblint_commit" -> assert_fn ctx (List.hd args) false true
-    | `Unknown "__goblint_assert" -> assert_fn ctx (List.hd args) true true
-    | `Assert e -> assert_fn ctx e (get_bool "dbg.debug") (not (get_bool "dbg.debug"))
+    | `Unknown "__goblint_check" -> assert_fn ctx (List.hd args) false
+    | `Unknown "__goblint_commit" -> assert_fn ctx (List.hd args) true
+    | `Unknown "__goblint_assert" -> assert_fn ctx (List.hd args) true
+    | `Assert e -> assert_fn ctx e (not (get_bool "dbg.debug"))
     | _ -> begin
         let st =
           match LF.get_invalidate_action f.vname with
