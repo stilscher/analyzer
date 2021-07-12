@@ -4,7 +4,6 @@ open Prelude.Ana
 open Analyses
 open Apron
 open OctApronDomain
-open GobConfig
 
 module Spec : Analyses.MCPSpec =
 struct
@@ -112,10 +111,8 @@ struct
       begin
         match LibraryFunctions.classify f.vname args with
         | `Unknown "printf" -> ctx.local
-        | `Unknown "__goblint_check" -> assert_fn ctx (List.hd args) false
-        | `Unknown "__goblint_commit" -> assert_fn ctx (List.hd args) true
-        | `Unknown "__goblint_assert" -> assert_fn ctx (List.hd args) true
-        | `Assert e -> assert_fn ctx e (not (get_bool "dbg.debug"))
+        (* | `Assert (e, _, change) -> assert_fn ctx e change *)
+        | `Assert (e, _, _) -> assert_fn ctx e true (* TODO: make assert() always change *)
         | `Malloc size ->
           (match r with
             | Some lv ->

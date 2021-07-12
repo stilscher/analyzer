@@ -2089,10 +2089,7 @@ struct
       end
     (* Handling the assertions *)
     | `Unknown "__assert_rtn" -> raise Deadcode (* gcc's built-in assert *)
-    | `Unknown "__goblint_check" -> assert_fn ctx (List.hd args) false
-    | `Unknown "__goblint_commit" -> assert_fn ctx (List.hd args) true
-    | `Unknown "__goblint_assert" -> assert_fn ctx (List.hd args) true
-    | `Assert e -> assert_fn ctx e (not (get_bool "dbg.debug"))
+    | `Assert (e, _, change) -> assert_fn ctx e change
     | _ -> begin
         let st =
           match LF.get_invalidate_action f.vname with

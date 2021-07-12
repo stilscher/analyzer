@@ -76,10 +76,7 @@ struct
 
   let special ctx (lval: lval option) (f:varinfo) (args:exp list) : D.t =
     match LibraryFunctions.classify f.vname args with
-    | `Unknown "__goblint_check" -> assert_fn ctx (List.hd args) true false
-    | `Unknown "__goblint_commit" -> assert_fn ctx (List.hd args) false true
-    | `Unknown "__goblint_assert" -> assert_fn ctx (List.hd args) true true
-    | `Assert e -> assert_fn ctx e (get_bool "dbg.debug") (not (get_bool "dbg.debug"))
+    | `Assert (e, should_warn, change) -> assert_fn ctx e should_warn change
     | _ -> ctx.local
 
   let startstate v = D.bot ()
