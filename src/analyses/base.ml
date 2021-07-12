@@ -836,8 +836,10 @@ struct
     if M.tracing then M.traceli "evalint" "base query_evalint %a\n" d_exp e;
     let r = match eval_rv_no_ask_evalint ask gs st e with
     | `Int i -> i (* TODO: cast to right ikind here? or is it guaranteed? *)
-    | `Bot   -> Queries.ID.bot () (* TODO: remove? *)
-    | `Top   -> Queries.ID.top () (* TODO: remove? *)
+    | `Bot (* if uninitialized (float?) array element, like eval_rv wrapper *)
+    | exception (IntDomain.ArithmeticOnIntegerBot _) (* like eval_rv wrapper *)
+    | `Top -> (* if float *)
+      Queries.ID.top ()
     (* | v      -> M.warn ("Query function answered " ^ (VD.show v)); Queries.Result.top q *)
     | v      -> M.warn ("Query function answered " ^ (VD.show v)); Queries.ID.bot ()
     in
