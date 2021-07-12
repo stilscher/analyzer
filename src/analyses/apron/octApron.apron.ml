@@ -4,6 +4,7 @@ open Prelude.Ana
 open Analyses
 open Apron
 open OctApronDomain
+open GobConfig
 
 module Spec : Analyses.MCPSpec =
 struct
@@ -97,15 +98,24 @@ struct
         (* TODO: don't go to top, but just forget r *)
         D.top_env (A.env ctx.local)
 
+
+  let assert_fn ctx e should_warn change =
+    if not change then
+      ctx.local
+    else
+      let res = D.assert_inv ctx.local e false in
+      if D.is_bot_env res then raise Deadcode;
+      res
+
   let special ctx r f args =
     if D.is_bot ctx.local then D.bot () else
       begin
         match LibraryFunctions.classify f.vname args with
-        | `Assert expression -> ctx.local
         | `Unknown "printf" -> ctx.local
-        | `Unknown "__goblint_check" -> ctx.local
-        | `Unknown "__goblint_commit" -> ctx.local
-        | `Unknown "__goblint_assert" -> ctx.local
+        | `Unknown "__goblint_check" -> assert_fn ctx (List.hd args) true false
+        | `Unknown "__goblint_commit" -> assert_fn ctx (List.hd args) false true
+        | `Unknown "__goblint_assert" -> assert_fn ctx (List.hd args) true true
+        | `Assert e -> assert_fn ctx e (get_bool "dbg.debug") (not (get_bool "dbg.debug"))
         | `Malloc size ->
           (match r with
             | Some lv ->
