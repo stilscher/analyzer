@@ -827,8 +827,8 @@ struct
     | `Int i -> i (* cast should be unnecessary, eval_rv should guarantee right ikind already *)
     | `Bot (* if uninitialized (float?) array element, like eval_rv wrapper *)
     | exception (IntDomain.ArithmeticOnIntegerBot _) (* like eval_rv wrapper *)
-    | `Top -> (* if float *)
-      Queries.ID.top ()
+    | `Top -> (* if float or unknown_exp *)
+      Queries.ID.top_of (Cilfacade.get_ikind (typeOf e)) (* TODO: get_ikind_exp *)
     (* | v      -> M.warn ("Query function answered " ^ (VD.show v)); Queries.Result.top q *)
     | v      -> M.warn ("Query function answered " ^ (VD.show v)); Queries.ID.bot ()
     in
